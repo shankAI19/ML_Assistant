@@ -1,0 +1,9 @@
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.env
+.git
+.runtime
+frontend
+backend/tests
+backend/uv.lock

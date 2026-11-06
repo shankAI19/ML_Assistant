@@ -1,0 +1,10 @@
+# Separate from the control plane. Pin/lock this image before the public demo.
+numpy>=2,<3
+pandas>=2.2,<4
+scikit-learn>=1.6,<2
+xgboost>=2.1,<4
+lightgbm>=4.5,<5
+matplotlib>=3.9,<4
+seaborn>=0.13,<1
+python-docx>=1.1,<2
+joblib>=1.4,<2

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A guided machine learning workbench. Understand your CSV, approve each step, and leave with a model and a report."
+    />
+    <title>ML Assistant</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="ML Assistant home"
+        ><span class="brand-mark">m<span>↗</span></span
+        ><span id="app-title">ML Assistant</span
+        ><span class="tag">WORKBENCH</span></a
+      >
+      <div class="top-actions">
+        <span class="privacy"
+          ><span class="status-dot"></span>Temporary session</span
+        ><button id="end-session" class="button ghost">End & delete</button>
+      </div>
+    </header>
+    <main class="workspace">
+      <aside class="sidebar">
+        <div class="eyebrow">YOUR WORKSPACE</div>
+        <h1>From data<br />to understanding.</h1>
+        <p class="muted intro">
+          A little guidance.<br />A model you can explain.
+        </p>
+        <section class="upload-card">
+          <div class="section-label"><span>01</span> Your dataset</div>
+          <label class="dropzone" for="training-file"
+            ><span class="upload-icon">↥</span><strong>Choose a CSV</strong
+            ><span id="upload-hint"
+              >Up to 25 MB · binary classification</span
+            ></label
+          >
+          <input
+            type="file"
+            id="training-file"
+            accept=".csv,text/csv"
+            class="file-input"
+          />
+          <p id="training-status" class="file-status">No dataset uploaded</p>
+        </section>
+        <section class="steps" aria-label="Workflow stages">
+          <div class="step" data-stage="profile">
+            <span class="step-number">1</span>
+            <div>
+              <strong>Understand the data</strong
+              ><small>Types, missing values, target</small>
+            </div>
+          </div>
+          <div class="step" data-stage="train">
+            <span class="step-number">2</span>
+            <div>
+              <strong>Build & refine</strong
+              ><small>Approve an experiment</small>
+            </div>
+          </div>
+          <div class="step" data-stage="evaluate">
+            <span class="step-number">3</span>
+            <div>
+              <strong>Finalize & test</strong
+              ><small>One untouched test split</small>
+            </div>
+          </div>
+          <div class="step" data-stage="report">
+            <span class="step-number">4</span>
+            <div>
+              <strong>Take it with you</strong
+              ><small>Predictions and a final report</small>
+            </div>
+          </div>
+        </section>
+        <section id="prediction-upload" class="prediction-upload" hidden>
+          <label for="prediction-file" class="button secondary full"
+            >Upload prediction CSV</label
+          >
+          <input
+            type="file"
+            id="prediction-file"
+            accept=".csv,text/csv"
+            class="file-input"
+          />
+          <p id="prediction-status" class="muted small">
+            Optional labels enable performance evaluation.
+          </p>
+        </section>
+        <div class="sidebar-bottom">
+          <span class="tiny-label">EXECUTION ENVIRONMENT</span>
+          <p id="environment-status">Checking services…</p>
+          <button id="containment-demo" class="text-button">
+            Run 3-second containment check ↗
+          </button>
+          <p class="small muted">
+            Files and conversation are deleted when you end the session or it
+            expires. Download your outputs first.
+          </p>
+        </div>
+      </aside>
+      <section class="conversation-panel">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">LET’S WORK THROUGH IT</span>
+            <h2>Your ML guide</h2>
+          </div>
+          <span id="agent-status" class="status-pill">Connecting</span>
+        </div>
+        <div id="notice" class="notice" role="status" hidden></div>
+        <div
+          id="messages"
+          class="messages"
+          aria-live="polite"
+          aria-label="Conversation"
+        ></div>
+        <section
+          id="approval-panel"
+          class="approval-panel"
+          hidden
+          aria-label="Action awaiting approval"
+        ></section>
+        <div class="composer-area">
+          <div id="suggestions" class="suggestions">
+            <button
+              data-prompt="Please inspect my dataset and help me decide where to start."
+            >
+              Help me get started ↗</button
+            ><button
+              data-prompt="How do you handle missing values and different feature types?"
+            >
+              Explain the process ↗
+            </button>
+          </div>
+          <form id="chat-form" class="composer">
+            <label class="sr-only" for="message">Your message</label
+            ><textarea
+              id="message"
+              rows="2"
+              placeholder="Tell me what you’d like to predict…"
+              maxlength="6000"
+              required
+            ></textarea
+            ><button
+              id="send-message"
+              class="send-button"
+              type="submit"
+              aria-label="Send message"
+            >
+              ↑
+            </button>
+          </form>
+          <p class="composer-caption">
+            You stay in control. Every execution needs your approval.
+          </p>
+        </div>
+      </section>
+      <section class="results-panel">
+        <div class="panel-header">
+          <div>
+            <span class="eyebrow">EVIDENCE, NOT GUESSWORK</span>
+            <h2>Results & artifacts</h2>
+          </div>
+          <span id="run-count" class="counter">0 runs</span>
+        </div>
+        <div id="results" class="results-content">
+          <div class="empty-state">
+            <div class="empty-graphic"><i></i><i></i><i></i><i></i><i></i></div>
+            <h3>Your data has a story.</h3>
+            <p>
+              Upload a CSV and talk with your guide.<br />Executed results will
+              appear here.
+            </p>
+            <div class="feature-tags">
+              <span>Interactive charts</span><span>Downloadable code</span
+              ><span>DOCX report</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "ml-assistant-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {"dev": "vite --configLoader native", "build": "vite build --configLoader native", "preview": "vite preview --configLoader native", "test": "node --test tests/*.test.js", "format": "prettier --write src index.html vite.config.js"},
+  "dependencies": {"plotly.js-dist-min": "^3.0.0"},
+  "devDependencies": {"dotenv": "^16.4.7", "vite": "^7.0.0", "prettier": "^3.4.2"}
+}

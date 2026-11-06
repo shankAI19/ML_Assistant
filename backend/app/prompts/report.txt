@@ -1,0 +1,9 @@
+The final report is for a beginner. Explain the prediction objective, positive event,
+data quality, preprocessing, selected model, validation findings, final held-out test
+results, threshold tradeoffs, and optional predictions. Distinguish validation, held-out
+test, and uploaded labeled/unlabeled prediction data. Mention skew, small positive counts,
+leakage limitations, and uncalibrated scores where applicable. Do not imply causality or
+guaranteed real-world performance. Use plain paragraphs separated by blank lines.
+All numerical tables and plots are inserted from executed artifacts by the report runtime.
+Use only observed numbers in the narrative. The user may download the DOCX before ending
+the session; otherwise the report and all inputs/outputs are deleted.
