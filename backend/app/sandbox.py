@@ -45,6 +45,34 @@ with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as bundle:
         path.chmod(0o400)
 """
 
+# Read outputs in the live container's mount namespace. Docker's GET /archive
+# can inspect the rootfs without seeing the running container's tmpfs contents.
+# Stream tar bytes on stdout and keep diagnostics separate on stderr.
+COLLECT_OUTPUTS = """\
+from pathlib import Path
+import sys
+import tarfile
+
+root = Path('/work/out')
+if root.is_symlink() or not root.is_dir():
+    raise ValueError('Task did not create /work/out')
+files = sorted(root.iterdir())
+if len(files) > 30:
+    raise ValueError('Too many output artifacts')
+total = 0
+for path in files:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('Output artifacts must be regular files')
+    total += path.stat().st_size
+if total > int(sys.argv[1]):
+    raise ValueError('Output artifact size limit exceeded')
+with tarfile.open(fileobj=sys.stdout.buffer, mode='w|') as bundle:
+    for path in files:
+        info = bundle.gettarinfo(str(path), arcname='out/' + path.name)
+        with path.open('rb') as source:
+            bundle.addfile(info, source)
+"""
+
 
 def read_artifacts(archive: bytes, limit: int) -> dict[str, bytes]:
     result = {}
@@ -140,6 +168,44 @@ class SandboxRunner:
             message = "".join(c for c in message if c.isprintable() or c in "\n\t")
             raise RuntimeError(f"Sandbox input transfer failed: {message[-4000:]}")
 
+    def _collect_outputs(self, container_id: str, limit: int, timeout: float):
+        exec_id = self.client.api.exec_create(
+            container_id,
+            ["python", "-I", "-c", COLLECT_OUTPUTS, str(limit)],
+            stdout=True,
+            stderr=True,
+            tty=False,
+            user="10001:10001",
+            workdir="/work",
+        )["Id"]
+
+        def collect():
+            archive, diagnostic = bytearray(), bytearray()
+            for stdout, stderr in self.client.api.exec_start(exec_id, stream=True, demux=True):
+                if stdout:
+                    archive.extend(stdout)
+                if stderr:
+                    diagnostic.extend(stderr)
+                if len(archive) > limit + 1024 * 1024:
+                    raise RuntimeError("Sandbox output limit exceeded")
+                if len(diagnostic) > 64 * 1024:
+                    raise RuntimeError("Sandbox output-transfer log limit exceeded")
+            status = self.client.api.exec_inspect(exec_id)
+            if status.get("Running") or status.get("ExitCode") != 0:
+                message = diagnostic.decode(errors="replace")[-4000:]
+                raise RuntimeError(f"Sandbox output transfer failed: {message}")
+            return read_artifacts(bytes(archive), limit)
+
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(collect)
+        try:
+            return future.result(timeout=timeout)
+        except TimeoutError:
+            raise RuntimeError("Sandbox output transfer exceeded its time limit") from None
+        finally:
+            # run() removes the container on all failures, including transfer timeout.
+            pool.shutdown(wait=False, cancel_futures=True)
+
     def run(self, session_id: str, code: str, inputs: dict[str, Path | bytes], *, timeout=None):
         if not self.slot.acquire(blocking=False):
             raise RuntimeError("Another sandbox is running. Please try again shortly.")
@@ -224,13 +290,7 @@ class SandboxRunner:
                 pool.shutdown(wait=False, cancel_futures=True)
             if exit_code != 0:
                 raise RuntimeError(f"Sandbox exited with code {exit_code}: {log[-4000:]}")
-            chunks, _ = container.get_archive("/work/out")
-            archive = bytearray()
-            for chunk in chunks:
-                archive.extend(chunk)
-                if len(archive) > limit + 1024 * 1024:
-                    raise RuntimeError("Sandbox output limit exceeded")
-            artifacts = read_artifacts(bytes(archive), limit)
+            artifacts = self._collect_outputs(container.id, limit, min(deadline, 30))
             return artifacts, {
                 "container_id": container.short_id,
                 "network": "none",

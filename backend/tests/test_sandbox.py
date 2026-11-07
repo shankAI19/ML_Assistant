@@ -54,18 +54,34 @@ def test_runner_enforces_boundary_and_removes_container(settings, wrapped):
         raise AssertionError("PUT /archive must not be used with read-only rootfs")
 
     container.put_archive = forbidden_archive_upload
-    container.get_archive = lambda path: ([archive_bytes()], {})
+
+    def forbidden_archive_download(*args):
+        raise AssertionError("GET /archive must not be used to read live tmpfs outputs")
+
+    container.get_archive = forbidden_archive_download
     container.remove = lambda **kw: captured.update(removed=kw)
 
     def create(**kwargs):
         captured.update(kwargs)
         return container
 
+    def create_exec(container_id, command, **kwargs):
+        kind = "stage" if kwargs.get("stdin") else "collect" if "-c" in command else "task"
+        return {"Id": kind}
+
+    def start_exec(exec_id, **kwargs):
+        if exec_id == "stage":
+            return connection
+        if exec_id == "collect":
+            assert kwargs == {"stream": True, "demux": True}
+            return [(archive_bytes(), None)]
+        return [b"done"]
+
     client = SimpleNamespace(
         containers=SimpleNamespace(create=create),
         api=SimpleNamespace(
-            exec_create=lambda *args, **kwargs: {"Id": "stage" if kwargs.get("stdin") else "task"},
-            exec_start=lambda *args, **kwargs: connection if kwargs.get("socket") else [b"done"],
+            exec_create=create_exec,
+            exec_start=start_exec,
             exec_inspect=lambda *args: {"ExitCode": 0},
         ),
     )
@@ -124,6 +140,53 @@ def test_staging_failures_stop_execution_and_remove_container(settings, timeout)
     assert created[0]["stdin"] is True
     assert created[0]["user"] == "10001:10001"
     assert transfer.closed
+    assert removed == [{"force": True, "v": True}]
+
+
+@pytest.mark.parametrize("failure", ["exit", "size", "unsafe_archive"])
+def test_collection_failures_remove_container(settings, failure, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.sandbox import SandboxRunner
+
+    removed = []
+    container = SimpleNamespace(
+        id="sandbox", start=lambda: None, remove=lambda **kwargs: removed.append(kwargs)
+    )
+
+    def create_exec(container_id, command, **kwargs):
+        assert kwargs["user"] == "10001:10001"
+        return {"Id": "collect" if "-c" in command else "task"}
+
+    def start_exec(exec_id, **kwargs):
+        if exec_id == "task":
+            return [b"done"]
+        if failure == "exit":
+            return [(None, b"Task did not create /work/out")]
+        if failure == "size":
+            return [(b"x" * (2 * 1024 * 1024 + 1), None)]
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as bundle:
+            info = tarfile.TarInfo("out/../../escape.json")
+            info.size = 2
+            bundle.addfile(info, io.BytesIO(b"{}"))
+        return [(archive.getvalue(), None)]
+
+    settings.max_output_mb = 1
+    client = SimpleNamespace(
+        containers=SimpleNamespace(create=lambda **kwargs: container),
+        api=SimpleNamespace(
+            exec_create=create_exec,
+            exec_start=start_exec,
+            exec_inspect=lambda exec_id: {
+                "ExitCode": 1 if failure == "exit" and exec_id == "collect" else 0
+            },
+        ),
+    )
+    runner = SandboxRunner(settings, client)
+    monkeypatch.setattr(runner, "_stage_inputs", lambda *args: None)
+    with pytest.raises((RuntimeError, ValueError)):
+        runner.run("a" * 32, "pass", {})
     assert removed == [{"force": True, "v": True}]
 
 

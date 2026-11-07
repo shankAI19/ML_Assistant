@@ -129,6 +129,9 @@ The sandbox runner enforces:
   Inputs are streamed to a fixed non-root Python staging process in writable tmpfs;
   Docker's archive-upload API is not used because some Engines reject it on read-only
   root filesystems. Staging failure prevents task execution and triggers container removal.
+  Outputs likewise stream from a fixed non-root collector in the live mount namespace,
+  rather than Docker's archive-download API, which may not see tmpfs files. Collection
+  enforces time, byte, and file limits, rejects unsafe artifacts, and cleans up on failure.
 * Container removal after success, failure, timeout, or cancellation.
 
 Execution receipts include image ID, code/input/artifact hashes, exit status, duration,
