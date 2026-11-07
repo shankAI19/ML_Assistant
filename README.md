@@ -126,6 +126,9 @@ The sandbox runner enforces:
   A container-local lifetime guard also stops/removes tasks if the control plane crashes.
 * One active sandbox at a time; bounded active sessions, interactions, and repair attempts.
 * Validated artifact types/paths; no unsafe tar extraction or model loading in FastAPI.
+  Inputs are streamed to a fixed non-root Python staging process in writable tmpfs;
+  Docker's archive-upload API is not used because some Engines reject it on read-only
+  root filesystems. Staging failure prevents task execution and triggers container removal.
 * Container removal after success, failure, timeout, or cancellation.
 
 Execution receipts include image ID, code/input/artifact hashes, exit status, duration,

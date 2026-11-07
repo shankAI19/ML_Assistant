@@ -1,5 +1,6 @@
 """The sole Docker boundary: no host execution fallback, bind mounts, or inherited env."""
 
+import builtins
 import hashlib
 import io
 import tarfile
@@ -13,6 +14,36 @@ import docker
 from .config import Settings
 
 LABEL = "ml-assistant.session"
+
+# A fixed transfer process, not agent-generated code. Read an exact byte count so
+# stdin need not be closed/half-closed to finish (also works with socket wrappers).
+# Docker's PUT /archive rejects read-only rootfs on some Engine versions even when
+# the requested destination is tmpfs. Writing from inside the container respects
+# the actual mount permissions while retaining read_only=True.
+STAGE_INPUTS = """\
+import io
+from pathlib import Path
+import shutil
+import sys
+import tarfile
+
+expected = int(sys.argv[1])
+data = sys.stdin.buffer.read(expected)
+if len(data) != expected:
+    raise ValueError('Incomplete input transfer')
+with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as bundle:
+    for member in bundle:
+        name = member.name
+        if (not member.isfile() or name in {'', '.', '..'}
+                or Path(name).name != name or '\\\\' in name or ':' in name
+                or any(ord(c) < 32 for c in name)):
+            raise ValueError('Invalid input archive member')
+        path = Path('/work') / name
+        with path.open('xb') as target:
+            with bundle.extractfile(member) as source:
+                shutil.copyfileobj(source, target)
+        path.chmod(0o400)
+"""
 
 
 def read_artifacts(archive: bytes, limit: int) -> dict[str, bytes]:
@@ -74,6 +105,41 @@ class SandboxRunner:
             if container.labels.get(LABEL) not in active_ids:
                 container.remove(force=True, v=True)
 
+    def _stage_inputs(self, container_id: str, archive: bytes, timeout: float):
+        exec_id = self.client.api.exec_create(
+            container_id,
+            ["python", "-I", "-c", STAGE_INPUTS, str(len(archive))],
+            stdin=True,
+            stdout=True,
+            stderr=True,
+            tty=False,
+            user="10001:10001",
+            workdir="/work",
+        )["Id"]
+        connection = self.client.api.exec_start(exec_id, socket=True, tty=False)
+        # Unix connections may be returned as SocketIO, with the duplex socket
+        # underneath. Other transports can return the socket directly.
+        transport = getattr(connection, "_sock", connection)
+        output = bytearray()
+        try:
+            transport.settimeout(timeout)
+            transport.sendall(archive)
+            while chunk := transport.recv(4096):
+                output.extend(chunk)
+                if len(output) > 64 * 1024:
+                    raise RuntimeError("Sandbox input-transfer log limit exceeded")
+        except builtins.TimeoutError:
+            raise RuntimeError("Sandbox input transfer exceeded its time limit") from None
+        finally:
+            connection.close()
+        status = self.client.api.exec_inspect(exec_id)
+        if status.get("Running") or status.get("ExitCode") != 0:
+            # Docker's multiplex framing may surround stderr. Drop its control
+            # bytes when presenting this bounded diagnostic.
+            message = output.decode(errors="replace")
+            message = "".join(c for c in message if c.isprintable() or c in "\n\t")
+            raise RuntimeError(f"Sandbox input transfer failed: {message[-4000:]}")
+
     def run(self, session_id: str, code: str, inputs: dict[str, Path | bytes], *, timeout=None):
         if not self.slot.acquire(blocking=False):
             raise RuntimeError("Another sandbox is running. Please try again shortly.")
@@ -116,15 +182,23 @@ class SandboxRunner:
             )
             container.start()
             buffer = io.BytesIO()
+            if "task.py" in inputs:
+                raise ValueError("task.py is reserved for the approved code")
             with tarfile.open(fileobj=buffer, mode="w") as bundle:
                 for name, value in {"task.py": code.encode(), **inputs}.items():
-                    if PurePosixPath(name).name != name or "\\" in name:
+                    if (
+                        name in {"", ".", ".."}
+                        or PurePosixPath(name).name != name
+                        or "\\" in name
+                        or ":" in name
+                        or any(ord(c) < 32 for c in name)
+                    ):
                         raise ValueError("Invalid sandbox input name")
                     data = value.read_bytes() if isinstance(value, Path) else value
                     info = tarfile.TarInfo(name)
                     info.size, info.uid, info.gid, info.mode = len(data), 10001, 10001, 0o400
                     bundle.addfile(info, io.BytesIO(data))
-            container.put_archive("/work", buffer.getvalue())
+            self._stage_inputs(container.id, buffer.getvalue(), min(deadline, 30))
             exec_id = self.client.api.exec_create(
                 container.id, ["python", "-I", "/work/task.py"], user="10001:10001", workdir="/work"
             )["Id"]
