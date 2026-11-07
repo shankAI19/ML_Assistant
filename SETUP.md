@@ -326,7 +326,7 @@ scp -i "$env:USERPROFILE\.ssh\vultr_ml_assistant" "linuxuser@YOUR_VM_IP:~/ML_Ass
 
 In the public application:
 
-1. Upload `training.csv` and ask the assistant to inspect it.
+1. Click **Upload CSV**, choose `training.csv`, select **Training**, and ask the assistant to inspect it. All subsequent CSVs use this same button; choose **Training** to replace the active experiment or **Predictions / testing** to upload additional data. Prediction/test files can be queued before finalization.
 2. Explain that `fraud` is the target and `1` is the positive class. Discuss excluding identifiers and how `timestamp` should be handled. For a simple initial baseline, exclude `transaction_id`, `account_id`, and `timestamp`, and use logistic regression with a stratified split.
 3. Agree on the split, class weighting, threshold, and focus metrics. Approve the complete training round once.
 4. Confirm that real validation metrics and interactive charts appear in Results. Ask a follow-up question without an approval prompt.

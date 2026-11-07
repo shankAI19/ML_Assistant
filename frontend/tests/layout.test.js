@@ -35,7 +35,7 @@ test("results appear beside the existing chat and preserve an unsent message", a
     false,
   );
   assert.equal(
-    document.querySelector("#training-file").closest(".upload-bar") !== null,
+    document.querySelector("#csv-file").closest(".upload-bar") !== null,
     true,
   );
 });

@@ -74,20 +74,12 @@ label:focus-within {
   font-weight: 650;
   letter-spacing: -0.6px;
 }
-.brand-mark {
-  background: var(--green);
-  color: white;
-  border-radius: 8px;
-  font-size: 27px;
-  line-height: 32px;
-  width: 34px;
-  text-align: center;
-  font-family: Georgia, serif;
-}
-.brand-mark span {
-  font-family: system-ui;
-  font-size: 16px;
-  vertical-align: top;
+.brand-logo {
+  display: block;
+  width: 56px;
+  height: 42px;
+  flex-shrink: 0;
+  object-fit: contain;
 }
 .top-actions {
   display: flex;
@@ -178,6 +170,26 @@ summary {
 .upload-control:has(input:disabled) label {
   opacity: 0.55;
   cursor: default;
+}
+.upload-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  color: inherit;
+}
+.upload-dialog::backdrop {
+  background: #223c3960;
+}
+.upload-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 21px;
+}
+.upload-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0;
 }
 .file-input {
   width: 1px;
@@ -581,6 +593,10 @@ td {
   .brand {
     font-size: 16px;
     gap: 6px;
+  }
+  .brand-logo {
+    width: 44px;
+    height: 33px;
   }
   .top-actions {
     gap: 8px;

@@ -3,6 +3,7 @@ export const state = {
   session: null,
   poll: null,
   stopped: false,
+  uploading: false,
   signature: "",
   resultsSignature: "",
 };

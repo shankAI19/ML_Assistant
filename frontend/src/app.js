@@ -5,7 +5,7 @@ import { state } from "./state.js";
 import { renderChat } from "./components/chat.js";
 import { renderApproval } from "./components/approval.js";
 import { renderResults, clearResults } from "./components/results.js";
-import { wireUploads } from "./components/upload.js";
+import { wireUploads, renderUploads } from "./components/upload.js";
 import { showResults } from "./layout.js";
 
 document.title = config.appTitle;
@@ -26,14 +26,10 @@ function stop() {
   state.resultsSignature = "";
   document.querySelector("#messages").replaceChildren();
   document.querySelector("#message").value = "";
-  document.querySelector("#training-status").textContent = "Session ended";
-  document.querySelector("#prediction-status").textContent = "Session ended";
-  document.querySelector("#prediction-upload").hidden = true;
+  renderUploads();
   clearResults();
   showResults(false);
   document.querySelector("#send-message").disabled = true;
-  document.querySelector("#training-file").disabled = true;
-  document.querySelector("#prediction-file").disabled = true;
   document.querySelector("#containment-demo").disabled = true;
   document.querySelector("#agent-status").textContent = "Session ended";
   document.querySelector("#approval-panel").hidden = true;
@@ -42,8 +38,20 @@ function stop() {
 
 async function update() {
   if (state.stopped) return;
+  const expectedExperiment = state.session?.experiment_id;
   const snapshot = await request("/sessions/current");
-  if (state.stopped) return;
+  if (state.stopped || expectedExperiment !== state.session?.experiment_id)
+    return;
+  if (
+    state.session?.experiment_id &&
+    state.session.experiment_id !== snapshot.experiment_id
+  ) {
+    clearResults();
+    showResults(false);
+    document.querySelector("#notice").hidden = true;
+    state.signature = "";
+    state.resultsSignature = "";
+  }
   state.session = snapshot;
   const signature = JSON.stringify([
     snapshot.messages,
@@ -76,20 +84,9 @@ async function update() {
     .classList.toggle("working", snapshot.busy);
   document.querySelector("#send-message").disabled =
     snapshot.busy || !!snapshot.pending;
-  document.querySelector("#training-file").disabled =
-    snapshot.busy || !!snapshot.pending || snapshot.dataset_uploaded;
-  document.querySelector("#prediction-file").disabled =
-    snapshot.busy || !!snapshot.pending;
-  document.querySelector("#prediction-upload").hidden = !snapshot.finalized;
+  renderUploads();
   document.querySelector("#containment-demo").disabled =
     snapshot.busy || !!snapshot.pending;
-  if (
-    snapshot.dataset_uploaded &&
-    document.querySelector("#training-status").textContent ===
-      "No dataset uploaded"
-  )
-    document.querySelector("#training-status").textContent =
-      "Training CSV uploaded";
   if (snapshot.error) notify(new Error(snapshot.error));
   const resultSignature = snapshot.runs.map((run) => run.id).join();
   if (resultSignature !== state.resultsSignature) {
@@ -192,7 +189,8 @@ document
   });
 wireUploads(update, notify);
 try {
-  await request("/sessions", { method: "POST" });
+  state.session = await request("/sessions", { method: "POST" });
+  renderUploads();
   const health = await request("/health");
   document.querySelector("#environment-status").textContent =
     `${health.sandbox_ready ? "Sandbox ready" : "Sandbox not ready"} · ${health.llm_configured ? "Inference configured" : "Inference key needed"}`;

@@ -1,5 +1,9 @@
 # ML Assistant
 
+<p align="center">
+  <img src="frontend/src/assets/ml-assistant-logo.png" alt="ML Assistant logo" width="280" />
+</p>
+
 **Turning a dataset and a loosely defined goal into a guided machine learning experiment.**
 
 Many people have useful data and a question they want to answer, but no machine learning background. They may want to identify fraudulent transactions, predict customer churn, or flag an operational risk without knowing which column should be the target, which features are useful, or how to evaluate a model.
@@ -40,6 +44,8 @@ The application produces interactive charts, computed metrics, downloadable exec
 Reports use a scientific format for human readers: an English summary and interpretation, data-quality tables, readable modeling methods, separate training/validation/test results, numbered figures with explanatory captions, and limitations. Configuration JSON and full execution receipts are kept out of the report narrative. An illustrated report ZIP includes Markdown, figure images, and the DOCX when conversion succeeds, so downloaded Markdown retains its illustrations. Short explanatory Python examples may appear when useful; code is not added by default.
 
 Uploads sit in a compact bar above the workspace. Conversation and results remain visible side by side on larger screens, with independent scrolling; the results pane appears after the first completed task. On narrow screens the two panes stack vertically.
+
+Use the single **Upload CSV** button for every file, then choose **Training** or **Predictions / testing**. Both roles can be uploaded repeatedly. Selecting Training for a replacement file starts a fresh active experiment, clearing the old conversation, model, pending approvals, and displayed results. Download outputs you want to keep before replacing training data. Prediction/test files may be queued at any stage and are used only after finalization; they are never used for training. Uploads pause only while a task or another upload is actively running. Failed replacements preserve the previous file and experiment.
 
 Each completed task offers two code downloads: **task script (.py)** is the exact entry script executed in the sandbox; **standalone experiment (.zip)** includes that script, the runtime source captured inside the executing container, pinned installed dependencies, the task's input data (including its fitted model when needed), and local run instructions. Extract the ZIP, create a Python 3.12 environment, install `requirements.txt`, and run `python run.py`. Outputs go to `data/out/`; no backend, Docker, or inference credentials are required. Local replay runs outside the application's sandbox. The original execution receipt is available separately. Downloads remain subject to the session's size and lifetime limits.
 
@@ -119,7 +125,7 @@ The frontend and API share one public origin, with backend routes under `/api`. 
 - **Supervised binary classification only.** The training dataset needs an existing target with two classes. Regression, multiclass classification, unsupervised learning, and deep learning are not implemented.
 - **Tabular CSV input and a small model set.** The current focus is on simpler, faster CPU models, rather than large-scale training, arbitrary generated programs, or unrestricted automated searches.
 - **Bounded data and execution.** Defaults include 25 MiB uploads, up to 100,000 rows and 200 columns, and per-task time and memory limits. High-cardinality categorical features and polynomial expansion have additional bounds. Some datasets will need preparation or smaller samples.
-- **Validation remains necessary; an internal test set does not.** Split proportions are configurable before training. Target and split policy remain fixed during an experiment, and finalization freezes the fitted pipeline without a full-data refit. Changing these foundations requires a new session.
+- **Validation remains necessary; an internal test set does not.** Split proportions are configurable before training. Target and split policy remain fixed during an experiment, and finalization freezes the fitted pipeline without a full-data refit. Uploading a training CSV again starts a new active experiment where these choices can be changed.
 - **Results need context.** Small positive-class counts, leakage, distribution shifts, and repeated validation-based refinement can undermine performance estimates. Unlabeled prediction data cannot establish accuracy or other label-dependent metrics. Scores are not presented as calibrated probabilities.
 - **Sessions are temporary.** There is no persistent project history or session recovery. Users must download their outputs before ending the session or expiry. Containers are removed after individual tasks; temporary files needed between tasks are retained only for the active session and deleted afterward. Failed cleanup is retried, and abandoned workspaces are removed on startup. This does not imply forensic disk erasure or control over the inference provider's retention policies.
 

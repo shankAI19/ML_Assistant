@@ -23,7 +23,9 @@ def make_tools(session, workspace, runner, max_repairs=1):
                 if request.task not in {"profile", "report"} and session.profile is None:
                     raise ValueError("Inspect the dataset first")
                 if request.task == "train" and session.finalized:
-                    raise ValueError("Model finalized; start a new session to retrain")
+                    raise ValueError(
+                        "Model finalized; upload a training CSV to start a new experiment"
+                    )
                 if request.task == "train" and session.plan:
                     fixed = (
                         "target",
@@ -38,7 +40,7 @@ def make_tools(session, workspace, runner, max_repairs=1):
                         getattr(request.plan, key) != getattr(session.plan, key) for key in fixed
                     ):
                         raise ValueError(
-                            "Target and split are fixed after first training. Start a new session to change them."
+                            "Target and split are fixed within an experiment. Upload a training CSV to start a new experiment and change them."
                         )
                 if request.task in {"evaluate", "predict"} and not session.latest_train:
                     raise ValueError("Train a model first")

@@ -12,7 +12,13 @@
   <body>
     <header class="topbar">
       <a class="brand" href="/" aria-label="ML Assistant home">
-        <span class="brand-mark">m<span>↗</span></span>
+        <img
+          class="brand-logo"
+          src="/src/assets/ml-assistant-logo.png"
+          alt="ML Assistant logo"
+          width="56"
+          height="42"
+        />
         <span id="app-title">ML Assistant</span>
       </a>
       <div class="top-actions">
@@ -36,37 +42,54 @@
     <main class="workspace">
       <section class="upload-bar" aria-label="Dataset uploads">
         <div class="upload-control">
-          <label class="button secondary" for="training-file"
-            >Upload training CSV</label
-          >
+          <label class="button secondary" for="csv-file">Upload CSV</label>
           <input
             type="file"
-            id="training-file"
+            id="csv-file"
             accept=".csv,text/csv"
             class="file-input"
+            disabled
           />
           <span id="training-status" class="file-status" role="status"
-            >No dataset uploaded</span
+            >No training CSV uploaded</span
           >
           <span id="upload-hint" class="small muted"
             >Up to 25 MB · binary classification</span
           >
         </div>
-        <div id="prediction-upload" class="upload-control" hidden>
-          <label for="prediction-file" class="button secondary"
-            >Upload prediction CSV</label
-          >
-          <input
-            type="file"
-            id="prediction-file"
-            accept=".csv,text/csv"
-            class="file-input"
-          />
-          <span id="prediction-status" class="file-status" role="status"
-            >Optional labels enable evaluation.</span
-          >
-        </div>
+        <span
+          id="prediction-status"
+          class="file-status"
+          role="status"
+          hidden
+        ></span>
       </section>
+      <dialog
+        id="upload-dialog"
+        class="upload-dialog"
+        aria-labelledby="upload-title"
+      >
+        <form method="dialog">
+          <h2 id="upload-title">Use this CSV for</h2>
+          <p id="upload-filename" class="file-status"></p>
+          <div class="upload-choices">
+            <button class="button primary" value="training">Training</button>
+            <button class="button secondary" value="prediction">
+              Predictions / testing
+            </button>
+          </div>
+          <p id="training-replacement-note" class="small muted" hidden>
+            Choosing Training starts a new experiment and clears the current
+            conversation, model, and results. Download any outputs you need
+            first.
+          </p>
+          <p class="small muted">
+            Prediction and test files can be uploaded now. They are used only
+            after the model is finalized.
+          </p>
+          <button class="text-button" value="cancel">Cancel</button>
+        </form>
+      </dialog>
       <div class="work-area">
         <section class="conversation-panel" aria-labelledby="conversation-tab">
           <div class="panel-header">

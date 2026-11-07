@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFil
 from fastapi.responses import FileResponse
 
 from .schemas import ApprovalRequest, ChatRequest
+from .workspace import new_id
 
 router = APIRouter(prefix="/api")
 
@@ -20,6 +21,7 @@ def snapshot(session):
     with session.lock:
         return {
             "id": session.id,
+            "experiment_id": session.experiment_id,
             "status": session.status,
             "busy": session.busy,
             "error": session.error,
@@ -27,7 +29,9 @@ def snapshot(session):
             "pending": session.pending,
             "task_id": session.task_id,
             "dataset_uploaded": bool(session.dataset),
+            "training_filename": session.dataset_filename,
             "prediction_uploaded": bool(session.prediction_dataset),
+            "prediction_filename": session.prediction_filename,
             "finalized": session.finalized,
             "runs": list(session.runs),
         }
@@ -83,25 +87,29 @@ def delete_session(request: Request, response: Response):
 
 @router.post("/uploads")
 async def upload(
-    request: Request, kind: Literal["training", "prediction"], file: Annotated[UploadFile, File()]
+    request: Request,
+    kind: Literal["training", "prediction"],
+    file: Annotated[UploadFile, File()],
+    replace_training: bool = False,
 ):
     session = current(request)
     if Path(file.filename or "").suffix.lower() != ".csv":
         await file.close()
         raise HTTPException(400, "Upload a CSV file")
     with session.lock:
-        if session.busy or session.pending:
-            raise HTTPException(409, "Finish or revise the current action before uploading")
-        if kind == "training" and session.dataset:
-            raise HTTPException(409, "Start a new session to change the training dataset")
-        if kind == "prediction" and not session.finalized:
-            raise HTTPException(409, "Finalize the model before uploading prediction/test data")
+        if session.busy:
+            raise HTTPException(409, "A task is running. Upload again when it finishes.")
+        if kind == "training" and session.dataset and not replace_training:
+            raise HTTPException(
+                409, "Confirm this upload as training data to start a new experiment."
+            )
         session.busy = True
     path = request.app.state.workspace.path(session.id) / "inputs" / f"{kind}.csv"
+    staging = path.with_name(f".{kind}-{new_id()}.upload")
     limit = request.app.state.settings.max_upload_mb * 1024 * 1024
     size = 0
     try:
-        with path.open("wb") as destination:
+        with staging.open("xb") as destination:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
                 if size > limit:
@@ -116,21 +124,26 @@ async def upload(
             raise HTTPException(400, "The CSV is empty")
         with session.lock:
             if session.closed:
-                path.unlink(missing_ok=True)
                 raise HTTPException(401, "Session ended")
+            staging.replace(path)
             if kind == "training":
+                if session.dataset:
+                    request.app.state.store.reset_experiment(session)
                 session.dataset = path.name
+                session.dataset_filename = (file.filename or "training.csv")[:200]
             else:
                 session.prediction_dataset = path.name
+                session.prediction_filename = (file.filename or "prediction.csv")[:200]
             session.messages.append(
                 {"role": "system", "content": f"{kind.title()} CSV uploaded ({size:,} bytes)."}
             )
         return {"uploaded": True, "kind": kind, "bytes": size}
     except Exception:
-        path.unlink(missing_ok=True)
+        staging.unlink(missing_ok=True)
         raise
     finally:
-        session.busy = False
+        with session.lock:
+            session.busy = False
         await file.close()
 
 

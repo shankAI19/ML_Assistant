@@ -14,6 +14,7 @@ from .workspace import Workspace, new_id
 class Session:
     id: str
     token: str
+    experiment_id: str = field(default_factory=new_id)
     created: float = field(default_factory=time.monotonic)
     touched: float = field(default_factory=time.monotonic)
     lock: Any = field(default_factory=threading.RLock)
@@ -27,7 +28,9 @@ class Session:
     agent: Any = None
     checkpointer: Any = None
     dataset: str | None = None
+    dataset_filename: str | None = None
     prediction_dataset: str | None = None
+    prediction_filename: str | None = None
     profile: dict | None = None
     plan: Any = None
     latest_train: str | None = None
@@ -71,6 +74,32 @@ class SessionStore:
                 return session
         self.delete(token)
         raise KeyError("Session expired. Start a new session.")
+
+    def reset_experiment(self, session: Session):
+        """Reset active experiment state after a replacement CSV has been validated.
+
+        The caller holds session.lock and has reserved the idle session for upload.
+        Previous artifact files remain downloadable by their existing URLs until
+        normal session cleanup; they are not evidence for the new experiment.
+        """
+        if session.checkpointer:
+            try:
+                session.checkpointer.delete_thread(session.id)
+            except Exception:  # noqa: BLE001 - a fresh agent never reuses the old checkpointer
+                logging.getLogger(__name__).warning(
+                    "Previous experiment checkpoint cleanup failed."
+                )
+        session.experiment_id = new_id()
+        session.agent = session.checkpointer = None
+        session.profile = session.plan = None
+        session.latest_train = session.prediction_dataset = session.prediction_filename = None
+        session.finalized = False
+        session.pending = session.approved_training = None
+        session.error = session.task_id = None
+        session.status = "ready"
+        session.invocations = session.failed_runs = 0
+        session.messages.clear()
+        session.runs.clear()
 
     def delete(self, token: str):
         with self.lock:
