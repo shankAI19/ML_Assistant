@@ -6,9 +6,28 @@ Many people have useful data and a question they want to answer, but no machine 
 
 ML Assistant is a conversational web application built for that starting point. It helps users understand their CSV, translate their goal into a supervised learning problem, agree on an experiment, and interpret results from real model training. The aim is to automate the practical work while helping users understand the decisions being made.
 
-For deployment instructions, configuration, and verification, see **[SETUP.md](SETUP.md)**.
+## Technology stack and Vultr deployment
 
-## How it helps
+The application combines a lightweight JavaScript frontend with a Python backend and isolated ML execution:
+
+| Layer | Technologies | Responsibility |
+| --- | --- | --- |
+| Web interface | Vanilla JavaScript, Vite, Plotly.js | CSV uploads, conversation, training-plan approval, interactive results, and downloads |
+| Backend API | Python, FastAPI, Pydantic | Request and experiment-plan validation, temporary sessions, artifact delivery, and serving the production frontend |
+| Agent orchestration | LangChain, LangGraph | LLM tool calls, conversational workflow, training approvals, and bounded retries |
+| Data and machine learning | pandas, NumPy, scikit-learn, XGBoost, LightGBM | Data inspection, preprocessing, classifier training, validation, and prediction |
+| Reporting | Matplotlib, markdown-it-py, python-docx | Saved-result plots and Markdown/DOCX progress reports |
+| Execution and hosting | Docker, Caddy, systemd | Disposable task containers, public HTTPS routing, and persistent application services |
+
+**Vultr Cloud Compute provides the central application host.** One CPU VM runs the FastAPI backend, serves the built frontend, orchestrates tasks, and launches their Docker sandboxes. Caddy provides the public HTTPS entry point, with the interface and `/api` endpoints sharing the same origin.
+
+**Vultr Serverless Inference powers all agent LLM calls**, including planning, explanations, and report narrative, through its OpenAI-compatible endpoint at `https://api.vultrinference.com/v1`. The inference model is configurable in the backend environment file; its API key stays in the backend and is never passed to the browser or task containers.
+
+**Docker containers on the Vultr VM perform the actual analysis and ML work.** Each task runs separately from the web application process, with network access disabled, resource limits, and container removal afterward. The backend collects computed results and execution evidence for the agent to explain and the user to inspect. Temporary session files support successive tasks and are deleted when the session ends or expires.
+
+For step-by-step VM provisioning, inference configuration, production builds, public HTTPS deployment, and end-to-end verification, see **[SETUP.md](SETUP.md)**. The architecture diagram below shows how these components connect.
+
+## How the ML Assistant helps
 
 The assistant combines conversation with executed analysis. It inspects column types, missing values, duplicate rows, and possible prediction targets, then discusses the findings with the user. It can suggest feature exclusions, preprocessing, an appropriate classifier, a decision threshold, and evaluation metrics suited to the objective.
 
