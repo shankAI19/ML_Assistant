@@ -26,17 +26,18 @@ def test_split_and_feature_options_validate():
             ExperimentPlan(target="y", positive_label="1", **options)
 
 
-def test_code_accepts_equivalent_plan_defaults_but_rejects_changed_threshold():
+def test_script_is_derived_from_validated_plan_instead_of_legacy_code():
     payload = {"task": "train", "plan": {"target": "y", "positive_label": "1"}, "narrative": ""}
     code = f"from ml_runtime import execute\nexecute({payload!r})"
     request = TaskRequest(**payload, code=code, explanation="Train the agreed logistic baseline")
     assert request.plan.test_fraction == 0.2
-    with pytest.raises(ValueError):
-        TaskRequest(
-            **{**payload, "plan": {**payload["plan"], "threshold": 0.8}},
-            code=code,
-            explanation="Train the agreed logistic baseline",
-        )
+    changed = TaskRequest(
+        **{**payload, "plan": {**payload["plan"], "threshold": 0.8}},
+        code=code,
+        explanation="Train the agreed logistic baseline",
+    )
+    assert "'threshold': 0.8" in changed.code
+    assert changed.code != code
 
 
 @pytest.mark.parametrize("stage", ["empty", "profile", "train", "evaluate", "predict"])

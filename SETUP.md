@@ -399,6 +399,7 @@ Rebuild the sandbox whenever `sandbox/` or `backend/app/task_templates/` changes
 | Session creation fails over plain HTTP | Use the public HTTPS URL. For temporary HTTP-only tunnel testing, `COOKIE_SECURE=false` is needed; restore true before public HTTPS deployment. |
 | Training times out or runs out of memory | Use a smaller dataset, fewer trees, or fewer expanded features. Keep resource caps in place. |
 | A change to a task template has no effect | Rebuild the sandbox image; restarting FastAPI alone does not update the image. |
+| A chat shows `TaskRequest` / `Use only: from ml_runtime import execute` | Update the backend code and restart it. Current tools generate their Python wrapper from a validated plan, so the model no longer needs to duplicate the plan in Python. This fix alone needs no sandbox or frontend rebuild. |
 
 Service diagnostics:
 

@@ -108,7 +108,7 @@ flowchart LR
 
 The Vultr VM hosts the web application, backend orchestration, and task containers. All agent reasoning and report-writing LLM calls use Vultr Serverless Inference. The inference model is configurable; the current default is `qwen3.8-flash-next`.
 
-The agent generates constrained Python calls into a reviewed ML runtime. Training, analysis, prediction, and report execution take place in separate Docker containers, rather than inside the web application process. Containers have no network access or credentials, run as a non-root user, enforce resource limits, and are removed after each task. Execution receipts and downloadable code make the work inspectable.
+The agent submits structured task requests and experiment settings. The backend validates those settings and generates the Python wrapper that calls the reviewed ML runtime; the model does not need to write or duplicate that wrapper. Invalid proposals receive a bounded correction attempt before approval or execution. Training still requires approval of the complete validated plan. Training, analysis, prediction, and report execution take place in separate Docker containers, rather than inside the web application process. Containers have no network access or credentials, run as a non-root user, enforce resource limits, and are removed after each task. Execution receipts and downloadable code make the work inspectable.
 
 The frontend and API share one public origin, with backend routes under `/api`. No separate frontend hosting service, managed database, GPU, or Kubernetes cluster is needed for this version.
 

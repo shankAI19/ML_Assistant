@@ -90,15 +90,16 @@ def test_real_langgraph_interrupt_runs_only_after_approval(client, runner, monke
     )
 
 
-def test_generated_code_cannot_escape_supported_runtime():
+def test_supplied_code_is_never_used_as_executable_source():
     request = profile_request()
     for code in [
         "import os\nos.system('id')",
         request["code"] + "\nprint('extra')",
         "from ml_runtime import execute\nexecute({'task': 'report'})",
     ]:
-        with pytest.raises(ValueError):
-            TaskRequest.model_validate({**request, "code": code})
+        validated = TaskRequest.model_validate({**request, "code": code})
+        assert validated.code == request["code"]
+        assert validated.code != code
 
 
 def test_holdout_cannot_be_used_for_refinement(client, runner):

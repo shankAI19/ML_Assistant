@@ -1,10 +1,25 @@
 import json
+import logging
 
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
+from pydantic import ValidationError
 
 from .agent import build_agent
 from .workspace import new_id
+
+
+def clear_agent_memory(session):
+    checkpointer = session.checkpointer
+    session.agent = session.checkpointer = None
+    session.pending = session.approved_training = None
+    if checkpointer:
+        try:
+            checkpointer.delete_thread(session.id)
+        except Exception:  # noqa: BLE001 - cleanup must not strand a failed request
+            logging.getLogger(__name__).warning(
+                "Agent checkpoint cleanup failed; memory discarded."
+            )
 
 
 def text_content(message):
@@ -34,9 +49,18 @@ class Workflow:
                 if approval.decision == "approve":
                     from .schemas import TaskRequest
 
-                    session.approved_training = TaskRequest.model_validate(
-                        session.pending["actions"][0]["args"]["request"]
-                    ).payload()
+                    try:
+                        session.approved_training = TaskRequest.model_validate(
+                            session.pending["actions"][0]["args"]["request"]
+                        ).payload()
+                    except (ValidationError, KeyError, IndexError, TypeError):
+                        session.error = (
+                            "This training proposal is no longer valid. "
+                            "Ask me to prepare a new plan; no training was started."
+                        )
+                        session.status = "error"
+                        clear_agent_memory(session)
+                        raise ValueError(session.error) from None
                 decisions = [
                     {
                         "type": approval.decision,
@@ -111,8 +135,7 @@ class Workflow:
             )
             with session.lock:
                 if session.closed:
-                    if session.checkpointer:
-                        session.checkpointer.delete_thread(session.id)
+                    clear_agent_memory(session)
                     return
                 interrupts = result.get("__interrupt__", ())
                 if interrupts:
@@ -148,23 +171,25 @@ class Workflow:
             with session.lock:
                 if not session.closed:
                     # Avoid putting SDK exception bodies (which may contain secrets) in responses.
-                    session.error = (
-                        str(exc)
-                        if isinstance(exc, ValueError)
-                        else "The agent request failed. Check the model/key and try again."
-                    )[:2000]
+                    if isinstance(exc, ValidationError):
+                        session.error = (
+                            "The proposed plan contained invalid settings. That action was not run. "
+                            "Please ask me to revise the plan or try again."
+                        )
+                    else:
+                        session.error = (
+                            str(exc)
+                            if isinstance(exc, ValueError)
+                            else "The agent request failed. Check the model/key and try again."
+                        )[:2000]
                     key = self.settings.api_key.get_secret_value()
                     if key:
                         session.error = session.error.replace(key, "[redacted]")
                     session.status = "error"
-                    # Invalid tool code or an interrupted request must not strand the conversation.
-                    if session.checkpointer:
-                        session.checkpointer.delete_thread(session.id)
-                    session.agent = session.checkpointer = None
-                    session.pending = None
+                    # A failed proposal or interrupted request must not strand the conversation.
+                    clear_agent_memory(session)
         finally:
             with session.lock:
                 session.busy = False
                 if session.closed and session.checkpointer:
-                    session.checkpointer.delete_thread(session.id)
-                    session.agent = session.checkpointer = None
+                    clear_agent_memory(session)

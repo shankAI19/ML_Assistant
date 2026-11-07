@@ -1,7 +1,6 @@
-import ast
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 TaskKind = Literal["profile", "train", "evaluate", "predict", "report"]
 
@@ -61,7 +60,6 @@ class TaskRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     task: TaskKind
     explanation: str = Field(min_length=10, max_length=3000)
-    code: str = Field(min_length=1, max_length=20000)
     plan: ExperimentPlan | None = None
     narrative: str = Field(default="", max_length=20000)
 
@@ -72,50 +70,28 @@ class TaskRequest(BaseModel):
             "narrative": self.narrative,
         }
 
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_script(cls, value):
+        # Older tool calls/checkpoints may include code. Never execute supplied
+        # source: the validated task payload is the sole source of the script.
+        if isinstance(value, dict) and "code" in value:
+            return {key: item for key, item in value.items() if key != "code"}
+        return value
+
     @model_validator(mode="after")
-    def validate_generated_code(self):
+    def validate_task(self):
         if self.task == "train" and self.plan is None:
             raise ValueError("Training requires a plan")
-        try:
-            tree = ast.parse(self.code)
-            first, second = tree.body
-            valid_import = (
-                isinstance(first, ast.ImportFrom)
-                and first.module == "ml_runtime"
-                and first.level == 0
-                and len(first.names) == 1
-                and first.names[0].name == "execute"
-                and first.names[0].asname is None
-            )
-            call = second.value if isinstance(second, ast.Expr) else None
-            valid_call = (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Name)
-                and call.func.id == "execute"
-                and len(call.args) == 1
-                and not call.keywords
-            )
-            if (
-                not valid_import
-                or not valid_call
-                or not self.matches_payload(ast.literal_eval(call.args[0]))
-            ):
-                raise ValueError("Code must call execute with exactly the approved task payload")
-        except (SyntaxError, ValueError, TypeError, AttributeError) as exc:
-            raise ValueError(
-                "Use only: from ml_runtime import execute; execute(<literal payload>)"
-            ) from exc
+        if self.task != "train" and self.plan is not None:
+            raise ValueError("Only training accepts a plan; other tasks use the fitted model")
         return self
 
-    def matches_payload(self, payload):
-        if not isinstance(payload, dict) or set(payload) != {"task", "plan", "narrative"}:
-            return False
-        if payload["plan"] is not None:
-            payload = {
-                **payload,
-                "plan": ExperimentPlan.model_validate(payload["plan"]).model_dump(),
-            }
-        return payload == self.payload()
+    @computed_field
+    @property
+    def code(self) -> str:
+        """The exact wrapper shown for approval and sent to the sandbox."""
+        return f"from ml_runtime import execute\nexecute({self.payload()!r})"
 
 
 class ChatRequest(BaseModel):

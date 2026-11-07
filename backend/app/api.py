@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 
 from .schemas import ApprovalRequest, ChatRequest
 from .workspace import new_id
@@ -153,6 +154,10 @@ def chat(body: ChatRequest, request: Request):
         return {
             "task_id": request.app.state.workflow.submit(current(request), message=body.message)
         }
+    except ValidationError:
+        raise HTTPException(
+            409, "The proposed settings are invalid. Ask the assistant to revise the plan."
+        ) from None
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
 
@@ -161,6 +166,10 @@ def chat(body: ChatRequest, request: Request):
 def approve(body: ApprovalRequest, request: Request):
     try:
         return {"task_id": request.app.state.workflow.submit(current(request), approval=body)}
+    except ValidationError:
+        raise HTTPException(
+            409, "The training proposal is invalid. Ask the assistant to prepare a new plan."
+        ) from None
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
 

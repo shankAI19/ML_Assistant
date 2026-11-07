@@ -37,3 +37,16 @@ ML code only inside Docker, including the training/prediction/report tests. They
 when the daemon/image is unavailable. Unit tests use a scripted test-only model and a
 fake runner to verify the real LangGraph approval/resume behavior without an API key.
 There is no mock execution mode in the product.
+
+Agent tools accept a structured task and experiment plan; executable Python is generated
+by the backend from the validated payload. Model-supplied legacy `code` values are ignored
+and never executed. The computed script is shown with training approval and is the same
+script passed to the sandbox. Invalid tool proposals receive bounded correction before
+approval/execution; exhausted planning failures produce a readable session error while
+leaving the API, uploads, and subsequent chat requests available.
+
+Planning regression tests exercise malformed arguments across training, inspection,
+evaluation, prediction and reporting, invalid JSON, unknown/multiple tool calls,
+invalid pending approvals, readable HTTP errors, and continued chat after failure.
+These tests use scripted model responses to reproduce failures deterministically;
+they do not establish a live error rate for the configured inference model.

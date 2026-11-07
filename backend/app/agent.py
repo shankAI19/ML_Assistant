@@ -5,6 +5,7 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .llm import build_llm
+from .planning import PlanningGuard
 from .schemas import TaskRequest
 from .tools import make_tools
 
@@ -20,12 +21,14 @@ def build_agent(settings, session, workspace, runner):
     prompt += "\nReport writing instructions:\n" + (
         Path(__file__).parent / "prompts" / "report.txt"
     ).read_text(encoding="utf-8")
+    tools = make_tools(session, workspace, runner, max_repairs=settings.repair_retries)
     agent = create_agent(
         model=build_llm(settings),
-        tools=make_tools(session, workspace, runner, max_repairs=settings.repair_retries),
+        tools=tools,
         system_prompt=prompt,
         checkpointer=checkpointer,
         middleware=[
+            PlanningGuard(tools, max_repairs=settings.repair_retries),
             HumanInTheLoopMiddleware(
                 interrupt_on={
                     "train_model": {
@@ -33,7 +36,7 @@ def build_agent(settings, session, workspace, runner):
                         "when": needs_training_approval,
                     },
                 }
-            )
+            ),
         ],
     )
     return agent, checkpointer
