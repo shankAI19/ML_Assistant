@@ -38,3 +38,21 @@ def test_built_frontend_and_its_assets_are_served(client):
     assert assets
     for asset in assets:
         assert client.get(asset).status_code == 200
+
+
+def test_experiment_download_is_scoped_to_the_session(client):
+    client.post("/api/sessions")
+    session = next(iter(client.app.state.store.sessions.values()))
+    task_id = "a" * 32
+    destination = client.app.state.workspace.path(session.id) / "outputs" / task_id
+    destination.mkdir()
+    (destination / "experiment.zip").write_bytes(b"PK experiment")
+    url = f"/api/artifacts/{task_id}/experiment.zip"
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.content == b"PK experiment"
+    assert "attachment" in response.headers["content-disposition"]
+    client.cookies.clear()
+    assert client.get(url).status_code == 401
+    client.post("/api/sessions")
+    assert client.get(url).status_code == 404

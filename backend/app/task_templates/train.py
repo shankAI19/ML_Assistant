@@ -6,12 +6,13 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
-from .common import OUT, charts, load_csv, metrics, normalize, prepare, split_indices
+from .common import charts, load_csv, metrics, normalize, prepare, split_indices
+from .paths import OUT, WORK
 
 
 def run(payload):
     plan = payload["plan"]
-    source = load_csv("/work/input.csv")
+    source = load_csv(WORK / "input.csv")
     frame, y, features, classes, dropped = prepare(source, plan)
     removed_duplicates = len(source) - dropped - len(frame)
     train, val, test = split_indices(frame, y, plan)

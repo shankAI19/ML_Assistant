@@ -1,8 +1,9 @@
 from .common import load_csv
+from .paths import WORK
 
 
 def run(payload):
-    frame = load_csv("/work/input.csv")
+    frame = load_csv(WORK / "input.csv")
     columns = []
     for name in frame:
         series = frame[name]

@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+from zipfile import ZipFile
 
 import pytest
 
@@ -44,6 +45,12 @@ def test_train_test_predict_and_report_inside_docker(docker_runner, model):
     artifacts, receipt = docker_runner.run(sid, script("profile"), {"input.csv": source})
     plan = ExperimentPlan(target="fraud", positive_label="1", model=model, trees=30).model_dump()
     trained, _ = docker_runner.run(sid, script("train", plan), {"input.csv": source})
+    with ZipFile(io.BytesIO(trained["experiment.zip"])) as bundle:
+        assert bundle.read("task.py").decode() == script("train", plan)
+        assert bundle.read("data/input.csv") == source
+        assert b"pipeline.fit" in bundle.read("ml_tasks/train.py")
+        assert b"scikit-learn==" in bundle.read("requirements.txt")
+        assert "run.py" in bundle.namelist()
     validation = json.loads(trained["result.json"])
     assert validation["evaluation_partition"] == "validation"
     assert validation["validation_metrics"]["rows"] > 0
@@ -70,10 +77,54 @@ def test_train_test_predict_and_report_inside_docker(docker_runner, model):
             "report",
             narrative="This experiment identifies the positive event using the approved features.",
         ),
-        {**inputs, "evidence.json": json.dumps(evidence).encode()},
+        {
+            **inputs,
+            "evidence.json": json.dumps(evidence).encode(),
+            "chart_001_train_confusion.json": trained["confusion.json"],
+            "chart_001_train_roc.json": trained["roc.json"],
+            "chart_001_train_precision_recall.json": trained["precision_recall.json"],
+        },
     )
     assert report["report.docx"].startswith(b"PK")
-    assert b"Your classification report" in report["report.md"]
+    assert b"Binary classification study report" in report["report.md"]
+    assert b"```json" not in report["report.md"]
+    assert b"Execution evidence:" not in report["report.md"]
+    assert b"Figure 1." in report["report.md"]
+    with ZipFile(io.BytesIO(report["report.zip"])) as package:
+        assert "report.md" in package.namelist()
+        assert "report.docx" in package.namelist()
+        assert len([name for name in package.namelist() if name.endswith(".png")]) == 3
+    with ZipFile(io.BytesIO(report["report.docx"])) as document:
+        assert len([name for name in document.namelist() if name.startswith("word/media/")]) == 3
+        xml = document.read("word/document.xml").decode()
+        assert 'w:val="Title"' in xml
+        assert "Figure 1." in xml
+        assert xml.count('w:pStyle w:val="Caption"') == 3
+        assert "<w:tbl>" in xml
+    for outputs in (artifacts, evaluated, predicted, report):
+        assert "experiment.zip" in outputs
+    if model == "logistic":
+        # Replay the extracted package from a different directory, using its own
+        # Python sources and data rather than the installed sandbox entry point.
+        replay_code = """import json
+import subprocess
+import sys
+from pathlib import Path
+from zipfile import ZipFile
+
+root = Path("/tmp/standalone replay")
+with ZipFile("/work/experiment.zip") as bundle:
+    bundle.extractall(root)
+subprocess.run([sys.executable, str(root / "run.py")], cwd="/tmp", check=True)
+result = json.loads((root / "data/out/result.json").read_text())
+Path("/work/out").mkdir()
+Path("/work/out/result.json").write_text(json.dumps(result))
+"""
+        replayed, _ = docker_runner.run(
+            sid, replay_code, {"experiment.zip": trained["experiment.zip"]}
+        )
+        replay_result = json.loads(replayed["result.json"])
+        assert replay_result["validation_metrics"] == validation["validation_metrics"]
     assert (
         docker_runner.client.containers.list(
             all=True, filters={"label": f"ml-assistant.session={sid}"}

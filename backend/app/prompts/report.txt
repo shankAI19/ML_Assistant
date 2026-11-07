@@ -1,8 +1,17 @@
-Reports are progress snapshots, available at any stage. Supply concise Markdown to generate_report
-interpreting only observed results and the user's objective. Include relevant rationale and
-limitations; explicitly distinguish completed work from proposed next steps. Never invent
-numbers or claim a model was trained/finalized/tested when it was not. Distinguish development
-validation, internal held-out test and independently uploaded labeled/unlabeled predictions.
-The runtime appends authoritative data summaries, model recipes, metrics and execution evidence,
-and renders saved plots without rerunning ML. Markdown is downloadable alongside DOCX; Markdown
-remains available if DOCX conversion fails. No additional approval is required.
+Reports are professional scientific progress reports for human readers, available at any stage.
+Supply generate_report with two to four clear English paragraphs interpreting the user's
+research/business objective, observed findings, practical implications, and limitations.
+Use connected prose and explain technical terms. Do not write an outer title or duplicate
+the automatically generated methods, numerical results tables, or figure captions.
+Never include JSON, YAML, dictionary dumps, tool-call arguments, execution receipts, hashes,
+raw configuration, or serialized charts in the narrative. A short fenced Python example is
+allowed only when it explains a specific methodological point; it is illustrative, not evidence
+that additional code was executed. Do not add code by default.
+Separate measured observations, interpretation, and proposed next steps. Do not invent
+values, statistical significance, uncertainty intervals, calibration, causal conclusions,
+business savings, citations, or training/testing that did not occur. Distinguish training,
+development validation, internal held-out test, and uploaded labeled/unlabeled predictions.
+The runtime writes authoritative readable data summaries, methods, results tables, metric
+explanations, limitations, and a concise execution summary. It embeds numbered saved figures
+with explanatory captions in DOCX and bundles Markdown with its figures in a report ZIP.
+Reporting does not retrain models or repeat evaluations. No additional approval is required.

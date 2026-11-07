@@ -1,4 +1,5 @@
 import json
+from zipfile import ZipFile
 
 import pytest
 
@@ -57,14 +58,7 @@ def test_report_progress_and_markdown_survive_conversion_failure(tmp_path, monke
     source = tmp_path / "evidence.json"
     source.write_text(json.dumps(evidence), encoding="utf-8")
     monkeypatch.setattr(report, "OUT", tmp_path)
-    original_read = report.Path.read_text
-    monkeypatch.setattr(
-        report.Path,
-        "read_text",
-        lambda path, **kw: original_read(
-            source if path == report.Path("/work/evidence.json") else path, **kw
-        ),
-    )
+    monkeypatch.setattr(report, "WORK", tmp_path)
     monkeypatch.setattr(report, "saved_plots", list)
 
     def fail(*args):
@@ -76,8 +70,11 @@ def test_report_progress_and_markdown_survive_conversion_failure(tmp_path, monke
     assert "## Findings" in text
     assert result["report"] is None
     assert result["warnings"]
+    with ZipFile(tmp_path / "report.zip") as package:
+        assert package.read("report.md") == (tmp_path / "report.md").read_bytes()
+        assert "report.docx" not in package.namelist()
     if stage == "train":
-        assert "0.7500" in text
+        assert "75.0%" in text
         assert "not been finalized" in text
     if stage == "empty":
         assert "No model has been trained" in text

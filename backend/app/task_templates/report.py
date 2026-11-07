@@ -1,181 +1,12 @@
-"""Build reports from saved evidence only, without loading or evaluating a model."""
+"""Produce scientific reports from saved results without rerunning ML."""
 
 import json
-from pathlib import Path
+import re
+from zipfile import ZIP_DEFLATED, ZipFile
 
-OUT = Path("/work/out")
-
-
-def cell(value):
-    return str(value).replace("|", "\\|").replace("\n", " ")
-
-
-def evidence_markdown(evidence, narrative):
-    lines = ["# Your classification report", "", "Work completed in this temporary session.", ""]
-    if narrative.strip():
-        lines += ["## Interpretation", "", narrative.strip(), ""]
-    if not evidence:
-        lines += ["No analysis or training has been completed yet.", ""]
-    for index, item in enumerate(evidence, 1):
-        result = item["result"]
-        lines += [f"## {index}. {item['task'].title()}", ""]
-        if item["task"] == "profile":
-            lines += [
-                f"Rows: {result.get('rows', 'unknown')}. Duplicates: {result.get('duplicates', 'unknown')}.",
-                "",
-                "| Column | Type | Missing | Unique |",
-                "| --- | --- | --- | --- |",
-            ]
-            for column in result.get("columns", []):
-                lines.append(
-                    "| "
-                    + " | ".join(
-                        cell(column.get(k, "")) for k in ("name", "dtype", "missing", "unique")
-                    )
-                    + " |"
-                )
-            lines.append("")
-        if result.get("plan"):
-            lines += [
-                "### Approved training recipe",
-                "",
-                "```json",
-                json.dumps(result["plan"], indent=2),
-                "```",
-                "",
-                "Learned preprocessing was fitted on training data only.",
-                "",
-            ]
-        if result.get("features"):
-            lines += ["Features: " + ", ".join(cell(v) for v in result["features"]), ""]
-        if result.get("split_counts"):
-            lines += ["Actual partition sizes: " + json.dumps(result["split_counts"]), ""]
-        for label, key in [
-            ("Training", "training_metrics"),
-            ("Validation", "validation_metrics"),
-            ("Test / uploaded labeled data", "metrics"),
-        ]:
-            values = result.get(key)
-            if isinstance(values, dict):
-                lines += [f"### {label} metrics", "", "| Metric | Value |", "| --- | --- |"]
-                for name, value in values.items():
-                    display = (
-                        "Unavailable"
-                        if value is None
-                        else f"{value:.4f}"
-                        if isinstance(value, float)
-                        else str(value)
-                    )
-                    lines.append(f"| {cell(name.replace('_', ' '))} | {display} |")
-                lines.append("")
-        if item["task"] == "predict":
-            lines += [
-                f"Prediction rows: {result.get('rows')}. Alert rate: {result.get('alert_rate')}.",
-                "",
-            ]
-        if result.get("note"):
-            lines += [result["note"], ""]
-        for warning in result.get("warnings", []):
-            lines.append(f"- {warning}")
-        lines += [
-            "",
-            "Execution evidence: " + json.dumps(item.get("receipt", {}), sort_keys=True),
-            "",
-        ]
-    tasks = {item["task"] for item in evidence}
-    lines += ["## Work remaining and limitations", ""]
-    if "train" not in tasks:
-        lines.append("- No model has been trained.")
-    if "evaluate" not in tasks:
-        lines.append("- The model has not been finalized.")
-    if not any(isinstance(item["result"].get("metrics"), dict) for item in evidence):
-        lines.append(
-            "- No test performance has been measured. Validation describes development performance only."
-        )
-    lines += [
-        "- Unlabeled data supports predictions, not label-dependent performance metrics.",
-        "- Scores are uncalibrated unless calibration was explicitly assessed. Average precision is not trapezoidal PR area.",
-        "- Leakage requires domain review; observed results do not guarantee future performance.",
-        "- Download outputs before ending the session. All session data is temporary.",
-        "",
-    ]
-    return "\n".join(lines)
-
-
-def add_inline(paragraph, token):
-    bold = italic = False
-    for child in token.children or []:
-        if child.type == "strong_open":
-            bold = True
-        elif child.type == "strong_close":
-            bold = False
-        elif child.type == "em_open":
-            italic = True
-        elif child.type == "em_close":
-            italic = False
-        elif child.type in {"text", "code_inline"}:
-            run = paragraph.add_run(child.content)
-            run.bold, run.italic = bold, italic
-            if child.type == "code_inline":
-                run.font.name = "Consolas"
-        elif child.type in {"softbreak", "hardbreak"}:
-            paragraph.add_run("\n")
-
-
-def to_docx(markdown, plots):
-    from docx import Document
-    from docx.shared import Inches, Pt
-    from markdown_it import MarkdownIt
-
-    document = Document()
-    document.styles["Normal"].font.size = Pt(11)
-    tokens = MarkdownIt("commonmark").enable("table").parse(markdown)
-    paragraph = table = row = None
-    list_style = None
-    column = 0
-    for token in tokens:
-        kind = token.type
-        if kind == "heading_open":
-            paragraph = document.add_heading(level=min(int(token.tag[1:]), 4))
-        elif kind == "bullet_list_open":
-            list_style = "List Bullet"
-        elif kind == "ordered_list_open":
-            list_style = "List Number"
-        elif kind in {"bullet_list_close", "ordered_list_close"}:
-            list_style = None
-        elif kind == "paragraph_open":
-            paragraph = document.add_paragraph(style=list_style)
-        elif kind == "table_open":
-            table = document.add_table(rows=0, cols=0)
-            table.style = "Light Shading Accent 1"
-        elif kind == "tr_open":
-            row, column = table.add_row(), 0
-        elif kind in {"th_open", "td_open"}:
-            if column >= len(table.columns):
-                table.add_column(Inches(2.5))
-            paragraph = row.cells[column].paragraphs[0]
-            column += 1
-        elif kind == "table_close":
-            width = Inches(6 / max(1, len(table.columns)))
-            for grid_column in table.columns:
-                grid_column.width = width
-            for table_row in table.rows:
-                for table_cell in table_row.cells:
-                    table_cell.width = width
-        elif kind == "inline":
-            if paragraph is None:
-                paragraph = document.add_paragraph()
-            add_inline(paragraph, token)
-        elif kind in {"fence", "code_block"}:
-            paragraph = document.add_paragraph()
-            run = paragraph.add_run(token.content)
-            run.font.name = "Consolas"
-            run.font.size = Pt(9)
-    if plots:
-        document.add_heading("Saved evaluation plots", level=1)
-        for path in plots:
-            document.add_picture(str(path), width=Inches(5.8))
-    document.save(OUT / "report.docx")
+from .paths import OUT, WORK
+from .report_content import MODELS, evidence_markdown
+from .report_document import to_docx
 
 
 def saved_plots():
@@ -184,61 +15,153 @@ def saved_plots():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    paths = []
-    for source in sorted(Path("/work").glob("chart_*.json"))[-6:]:
+    evidence = json.loads((WORK / "evidence.json").read_text(encoding="utf-8"))
+    contexts = {}
+    training_round = uploaded = 0
+    for index, item in enumerate(evidence, 1):
+        task, result = item["task"], item["result"]
+        if task == "train":
+            training_round += 1
+            model = MODELS.get(result.get("model"), "classifier")
+            context = f"training round {training_round} validation data ({model})"
+        elif task == "evaluate":
+            context = f"the held-out test data for training round {training_round}"
+        elif task == "predict":
+            uploaded += 1
+            context = f"uploaded labeled dataset {uploaded}"
+        else:
+            context = "the recorded assessment"
+        contexts[item.get("sequence", index)] = (context, result)
+    plots = []
+    for source in sorted(WORK.glob("chart_*.json"))[-6:]:
         figure = None
         try:
+            match = re.fullmatch(r"chart_(\d+)_(train|evaluate|predict)_(.+)\.json", source.name)
+            if not match:
+                continue
+            context, result = contexts.get(int(match[1]) + 1, ("the recorded assessment", {}))
+            kind = match[3]
+            titles = {
+                "confusion": "Confusion matrix",
+                "roc": "Receiver operating characteristic",
+                "precision_recall": "Precision and recall",
+                "thresholds": "Decision threshold tradeoffs",
+            }
+            title = titles.get(kind, "Recorded model assessment")
             definition = json.loads(source.read_text(encoding="utf-8"))
-            figure, axis = plt.subplots(figsize=(7, 4))
+            figure, axis = plt.subplots(figsize=(7.2, 4.3))
             for trace in definition["data"]:
                 if trace.get("type") == "heatmap":
-                    axis.imshow(trace["z"], cmap="Blues")
-                    for r, values in enumerate(trace["z"]):
-                        for c, value in enumerate(values):
-                            axis.text(c, r, str(value), ha="center", va="center")
-                    axis.set_xticks(range(len(trace["x"])), trace["x"])
-                    axis.set_yticks(range(len(trace["y"])), trace["y"])
+                    values = trace["z"]
+                    image = axis.imshow(values, cmap="Blues", aspect="auto")
+                    maximum = max(max(row) for row in values)
+                    for r, row in enumerate(values):
+                        for c, value in enumerate(row):
+                            axis.text(
+                                c,
+                                r,
+                                str(value),
+                                ha="center",
+                                va="center",
+                                color="white" if value > maximum / 2 else "black",
+                            )
+                    axis.set_xticks(range(len(trace["x"])), ["Negative", "Positive"])
+                    axis.set_yticks(range(len(trace["y"])), ["Negative", "Positive"])
+                    axis.set_xlabel("Predicted class")
+                    axis.set_ylabel("Observed class")
+                    figure.colorbar(image, ax=axis, label="Number of cases")
                 else:
-                    axis.plot(trace["x"], trace["y"], label=trace.get("name", ""))
+                    draw = axis.step if kind == "precision_recall" else axis.plot
+                    options = {"where": "post"} if kind == "precision_recall" else {}
+                    axis_options = (
+                        {"linestyle": "--"} if trace.get("line", {}).get("dash") == "dot" else {}
+                    )
+                    draw(
+                        trace["x"],
+                        trace["y"],
+                        label=trace.get("name", "").replace("_", " ").capitalize(),
+                        linewidth=1.8,
+                        **options,
+                        **axis_options,
+                    )
             layout = definition.get("layout", {})
-            stage = {
-                "train": "Validation",
-                "evaluate": "Held-out test",
-                "predict": "Uploaded labeled data",
-            }.get(source.name.split("_")[2], "Saved results")
-            axis.set_title(f"{stage}: {layout.get('title', {}).get('text', source.stem)}")
-            axis.set_xlabel(layout.get("xaxis", {}).get("title", {}).get("text", ""))
-            axis.set_ylabel(layout.get("yaxis", {}).get("title", {}).get("text", ""))
+            if kind != "confusion":
+                axis.set_xlabel(layout.get("xaxis", {}).get("title", {}).get("text", "Score"))
+                axis.set_ylabel(
+                    layout.get("yaxis", {})
+                    .get("title", {})
+                    .get("text", "Metric value or fraction flagged")
+                )
+                axis.set_xlim(0, 1)
+                axis.set_ylim(0, 1.03)
+                axis.grid(alpha=0.2)
+            if kind == "thresholds":
+                threshold = result.get("plan", {}).get("threshold")
+                if threshold is not None:
+                    axis.axvline(
+                        threshold, color="#555555", linestyle=":", label="Selected threshold"
+                    )
             if axis.lines:
-                axis.legend()
+                axis.legend(frameon=False, fontsize=9)
+            axis.set_title(title, fontsize=12, pad=12)
             figure.tight_layout()
-            path = OUT / f"saved_{len(paths)}.png"
-            figure.savefig(path, dpi=120)
-            paths.append(path)
-        except Exception:  # noqa: BLE001, S110 - a malformed saved chart must not prevent a report
-            pass
+            path = OUT / f"figure_{len(plots) + 1:02}.png"
+            figure.savefig(path, dpi=170, facecolor="white")
+            description = {
+                "confusion": "Rows show observed classes and columns show predicted classes at the recorded decision threshold. Cell counts show correct classifications, false alarms, and missed positive cases.",
+                "roc": "Recall is plotted against the false-positive rate across score thresholds. The diagonal represents random ranking.",
+                "precision_recall": "Precision is plotted against recall across score thresholds. The prevalence reference shows the positive-class frequency in the assessed data.",
+                "thresholds": "Precision, recall, F1, and the fraction flagged are shown across decision thresholds. Changing a threshold trades missed positives against false alarms and review volume; this plot does not constitute a new training round.",
+            }.get(kind, "This illustration was rendered from the saved assessment.")
+            plots.append(
+                {"path": path, "title": title, "caption": f"{title} for {context}. {description}"}
+            )
+        except Exception:  # noqa: BLE001, S112 - caller reports any omitted saved figures
+            continue
         finally:
             if figure is not None:
                 plt.close(figure)
-    return paths
+    return plots
 
 
 def run(payload):
-    evidence = json.loads(Path("/work/evidence.json").read_text(encoding="utf-8"))
-    markdown = evidence_markdown(evidence, payload.get("narrative", ""))
-    (OUT / "report.md").write_text(markdown, encoding="utf-8")
+    evidence = json.loads((WORK / "evidence.json").read_text(encoding="utf-8"))
     result = {
         "markdown": "report.md",
         "report": None,
-        "note": "Report summarizes saved evidence only; no training or new evaluation was performed.",
+        "bundle": "report.zip",
+        "figures": [],
+        "note": "Scientific report of completed work, with methods, results tables, interpretation, and saved figures. No training or new evaluation was performed.",
         "warnings": [],
     }
     try:
-        to_docx(markdown, saved_plots())
+        plots = saved_plots()
+        if len(plots) < len(list(WORK.glob("chart_*.json"))[-6:]):
+            result["warnings"].append(
+                "Some saved figures could not be rendered. The recorded numerical results remain available in the tables."
+            )
+    except Exception:  # noqa: BLE001 - tables and DOCX remain useful if plotting is unavailable
+        plots = []
+        result["warnings"].append(
+            "Saved figures could not be rendered. The recorded numerical results remain available in the tables."
+        )
+    markdown = evidence_markdown(evidence, payload.get("narrative", ""), plots)
+    if result["warnings"]:
+        markdown += "\n## Figure availability\n\n" + "\n\n".join(result["warnings"]) + "\n"
+    (OUT / "report.md").write_text(markdown, encoding="utf-8")
+    result["figures"] = [plot["path"].name for plot in plots]
+    try:
+        to_docx(markdown, plots)
         result["report"] = "report.docx"
-    except Exception:  # noqa: BLE001 - preserve the Markdown download on conversion failure
+    except Exception:  # noqa: BLE001 - preserve the illustrated Markdown bundle on conversion failure
         (OUT / "report.docx").unlink(missing_ok=True)
         result["warnings"].append(
-            "DOCX conversion could not complete. Download the complete Markdown report instead."
+            "DOCX conversion could not complete. Download the illustrated report ZIP or Markdown report instead."
         )
+    with ZipFile(OUT / "report.zip", "w", ZIP_DEFLATED) as archive:
+        archive.write(OUT / "report.md", "report.md")
+        if result["report"]:
+            archive.write(OUT / "report.docx", "report.docx")
+        for plot in plots:
+            archive.write(plot["path"], plot["path"].name)
     return result

@@ -330,11 +330,13 @@ In the public application:
 2. Explain that `fraud` is the target and `1` is the positive class. Discuss excluding identifiers and how `timestamp` should be handled. For a simple initial baseline, exclude `transaction_id`, `account_id`, and `timestamp`, and use logistic regression with a stratified split.
 3. Agree on the split, class weighting, threshold, and focus metrics. Approve the complete training round once.
 4. Confirm that real validation metrics and interactive charts appear in Results. Ask a follow-up question without an approval prompt.
-5. Request a report before finalization and download its Markdown and DOCX outputs.
+5. Request a report before finalization and download its Markdown, DOCX, and illustrated report ZIP. Verify that methods and metrics are readable tables, saved figures have captions, validation is distinguished from test performance, and the report contains no raw configuration or receipt JSON. Extract the ZIP to view Markdown with its figure images.
 6. Request finalization. A reserved internal test set is assessed once; a plan without one finalizes without inventing test metrics.
 7. Upload `prediction.csv`, request predictions, and download the CSV. Then try `prediction_labeled.csv` to obtain labeled performance metrics.
 8. Ask for a comparison and a report of the completed work.
 9. Download needed artifacts and select **End & delete**. Confirm the session becomes inaccessible and its temporary workspace is removed.
+
+Also download both the task script and standalone experiment ZIP from a completed run. Extract the ZIP on a machine with Python 3.12, follow its `README.txt` to install dependencies, and run `python run.py`. Verify outputs appear in `data/out/`. The ZIP includes the input data for that task; evaluation and prediction packages also include the fitted model. Check that another session cannot download these artifacts. Rebuild the sandbox image after updating the export/runtime code so new runs produce the ZIP.
 
 Check public health separately:
 

@@ -66,8 +66,13 @@ def make_tools(session, workspace, runner, max_repairs=1):
                     inputs["prediction.csv"] = root / "inputs" / session.prediction_dataset
                 if request.task == "report":
                     evidence = [
-                        {"task": r["task"], "result": r["result"], "receipt": r["receipt"]}
-                        for r in session.runs
+                        {
+                            "sequence": index + 1,
+                            "task": r["task"],
+                            "result": r["result"],
+                            "receipt": r["receipt"],
+                        }
+                        for index, r in enumerate(session.runs)
                         if r["task"] != "report"
                     ]
                     inputs["evidence.json"] = json.dumps(evidence, allow_nan=False).encode()
@@ -163,8 +168,10 @@ def make_tools(session, workspace, runner, max_repairs=1):
     @tool
     def generate_report(narrative: str = "") -> dict:
         """Generate a Markdown and DOCX progress report from existing results at ANY stage.
-        Supply a concise Markdown interpretation grounded in observed results. No plan,
-        model, training, finalization, or code arguments are required.
+        Supply clear scientific English about the objective, observed findings,
+        practical implications, and limitations. No JSON or configuration dumps.
+        The runtime supplies methods, tables, and captioned figures from saved results.
+        No plan, model, training, finalization, or code arguments are required.
         """
         payload = {"task": "report", "plan": None, "narrative": narrative[:20000]}
         return run_task(

@@ -5,37 +5,39 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="A guided machine learning workbench. Understand your CSV, approve your training plan, and leave with a model and a report."
+      content="Understand your CSV, approve a training plan, and leave with a model and a report."
     />
     <title>ML Assistant</title>
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" aria-label="ML Assistant home"
-        ><span class="brand-mark">m<span>↗</span></span
-        ><span id="app-title">ML Assistant</span
-        ><span class="tag">WORKBENCH</span></a
-      >
+      <a class="brand" href="/" aria-label="ML Assistant home">
+        <span class="brand-mark">m<span>↗</span></span>
+        <span id="app-title">ML Assistant</span>
+      </a>
       <div class="top-actions">
-        <span class="privacy"
-          ><span class="status-dot"></span>Temporary session</span
-        ><button id="end-session" class="button ghost">End & delete</button>
+        <details class="environment">
+          <summary>Session &amp; execution</summary>
+          <div class="environment-menu">
+            <p id="environment-status" role="status">Checking services…</p>
+            <button id="containment-demo" class="text-button">
+              Run 3-second containment check
+            </button>
+            <p class="small muted">
+              This session is temporary. Download your outputs before ending it.
+              Files and conversation are deleted when the session ends or
+              expires.
+            </p>
+          </div>
+        </details>
+        <button id="end-session" class="button ghost">End &amp; delete</button>
       </div>
     </header>
     <main class="workspace">
-      <aside class="sidebar">
-        <div class="eyebrow">YOUR WORKSPACE</div>
-        <h1>Data Lab</h1>
-        <p class="muted intro">
-          A little guidance.<br />A model you can explain.
-        </p>
-        <section class="upload-card">
-          <div class="section-label">Your dataset</div>
-          <label class="dropzone" for="training-file"
-            ><span class="upload-icon">↥</span><strong>Choose a CSV</strong
-            ><span id="upload-hint"
-              >Up to 25 MB · binary classification</span
-            ></label
+      <section class="upload-bar" aria-label="Dataset uploads">
+        <div class="upload-control">
+          <label class="button secondary" for="training-file"
+            >Upload training CSV</label
           >
           <input
             type="file"
@@ -43,13 +45,15 @@
             accept=".csv,text/csv"
             class="file-input"
           />
-          <p id="training-status" class="file-status">No dataset uploaded</p>
-        </section>
-        <p class="muted small">
-          Upload your data and tell your guide what you want to predict.
-        </p>
-        <section id="prediction-upload" class="prediction-upload" hidden>
-          <label for="prediction-file" class="button secondary full"
+          <span id="training-status" class="file-status" role="status"
+            >No dataset uploaded</span
+          >
+          <span id="upload-hint" class="small muted"
+            >Up to 25 MB · binary classification</span
+          >
+        </div>
+        <div id="prediction-upload" class="upload-control" hidden>
+          <label for="prediction-file" class="button secondary"
             >Upload prediction CSV</label
           >
           <input
@@ -58,73 +62,43 @@
             accept=".csv,text/csv"
             class="file-input"
           />
-          <p id="prediction-status" class="muted small">
-            Optional labels enable performance evaluation.
-          </p>
-        </section>
-        <div class="sidebar-bottom">
-          <span class="tiny-label">EXECUTION ENVIRONMENT</span>
-          <p id="environment-status">Checking services…</p>
-          <button id="containment-demo" class="text-button">
-            Run 3-second containment check ↗
-          </button>
-          <p class="small muted">
-            Files and conversation are deleted when you end the session or it
-            expires. Download your outputs first.
-          </p>
+          <span id="prediction-status" class="file-status" role="status"
+            >Optional labels enable evaluation.</span
+          >
         </div>
-      </aside>
+      </section>
       <div class="work-area">
-        <nav class="view-tabs" aria-label="Workspace views">
-          <button id="conversation-tab" aria-pressed="true" type="button">
-            Conversation</button
-          ><button id="results-tab" aria-pressed="false" type="button" hidden>
-            Results
-          </button>
-        </nav>
-        <section class="conversation-panel">
+        <section class="conversation-panel" aria-labelledby="conversation-tab">
           <div class="panel-header">
-            <div>
-              <span class="eyebrow">LET’S WORK THROUGH IT</span>
-              <h2>Your ML guide</h2>
-            </div>
-            <span id="agent-status" class="status-pill">Connecting</span>
+            <h2 id="conversation-tab">Conversation</h2>
+            <span id="agent-status" class="status-pill" role="status"
+              >Connecting</span
+            >
           </div>
-          <div id="notice" class="notice" role="status" hidden></div>
+          <div id="notice" class="notice" role="alert" hidden></div>
           <div
             id="messages"
             class="messages"
             aria-live="polite"
-            aria-label="Conversation"
+            aria-label="Conversation messages"
           ></div>
           <section
             id="approval-panel"
             class="approval-panel"
             hidden
-            aria-label="Action awaiting approval"
+            aria-label="Training approval"
           ></section>
           <div class="composer-area">
-            <div id="suggestions" class="suggestions">
-              <button
-                data-prompt="Please inspect my dataset and help me decide where to start."
-              >
-                Help me get started ↗</button
-              ><button
-                data-prompt="How do you handle missing values and different feature types?"
-              >
-                Explain the process ↗
-              </button>
-            </div>
             <form id="chat-form" class="composer">
-              <label class="sr-only" for="message">Your message</label
-              ><textarea
+              <label class="sr-only" for="message">Your message</label>
+              <textarea
                 id="message"
                 rows="2"
-                placeholder="Tell me what you’d like to predict…"
+                placeholder="Tell me what you'd like to predict…"
                 maxlength="6000"
                 required
-              ></textarea
-              ><button
+              ></textarea>
+              <button
                 id="send-message"
                 class="send-button"
                 type="submit"
@@ -133,36 +107,14 @@
                 ↑
               </button>
             </form>
-            <p class="composer-caption">
-              You stay in control. Approve each training round. Ask questions
-              and request reports anytime.
-            </p>
           </div>
         </section>
-        <section class="results-panel" hidden>
+        <section class="results-panel" hidden aria-labelledby="results-tab">
           <div class="panel-header">
-            <div>
-              <span class="eyebrow">EVIDENCE, NOT GUESSWORK</span>
-              <h2>Results & artifacts</h2>
-            </div>
+            <h2 id="results-tab">Results &amp; artifacts</h2>
             <span id="run-count" class="counter">0 runs</span>
           </div>
-          <div id="results" class="results-content">
-            <div class="empty-state">
-              <div class="empty-graphic">
-                <i></i><i></i><i></i><i></i><i></i>
-              </div>
-              <h3>Your data has a story.</h3>
-              <p>
-                Upload a CSV and talk with your guide.<br />Executed results
-                will appear here.
-              </p>
-              <div class="feature-tags">
-                <span>Interactive charts</span><span>Downloadable code</span
-                ><span>DOCX report</span>
-              </div>
-            </div>
-          </div>
+          <div id="results" class="results-content"></div>
         </section>
       </div>
     </main>

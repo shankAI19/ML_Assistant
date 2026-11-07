@@ -1,12 +1,13 @@
 import joblib
 import pandas as pd
 
-from .common import OUT, charts, load_csv, metrics, normalize, safe_csv_label
+from .common import charts, load_csv, metrics, normalize, safe_csv_label
+from .paths import OUT, WORK
 
 
 def run(payload):
-    bundle = joblib.load("/work/model.joblib")
-    frame = load_csv("/work/prediction.csv")
+    bundle = joblib.load(WORK / "model.joblib")
+    frame = load_csv(WORK / "prediction.csv")
     x = normalize(frame, bundle["features"], bundle["numeric"])
     scores = bundle["pipeline"].predict_proba(x)[:, 1]
     plan = bundle["plan"]

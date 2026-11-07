@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { request } from "../api.js";
+import { state } from "../state.js";
 
 export function wireUploads(onUpdate, onError) {
   document.querySelector("#upload-hint").textContent =
@@ -24,7 +25,11 @@ export function wireUploads(onUpdate, onError) {
       } catch (error) {
         onError(error);
       } finally {
-        input.disabled = false;
+        input.disabled =
+          state.stopped ||
+          !!state.session?.busy ||
+          !!state.session?.pending ||
+          (kind === "training" && !!state.session?.dataset_uploaded);
         input.value = "";
       }
     });

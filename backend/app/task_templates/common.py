@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -17,7 +16,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
-OUT = Path("/work/out")
+from .paths import OUT
 
 
 def clean(value):

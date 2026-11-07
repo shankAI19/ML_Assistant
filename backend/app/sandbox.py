@@ -93,7 +93,16 @@ def read_artifacts(archive: bytes, limit: int) -> dict[str, bytes]:
                 or member.size < 0
             ):
                 raise ValueError("Unsafe artifact path or file type")
-            if name.suffix not in {".json", ".csv", ".png", ".docx", ".joblib", ".txt", ".md"}:
+            if name.suffix not in {
+                ".json",
+                ".csv",
+                ".png",
+                ".docx",
+                ".joblib",
+                ".txt",
+                ".md",
+                ".zip",
+            }:
                 raise ValueError("Unsupported artifact type")
             total += member.size
             if total > limit or name.name in result or len(result) >= 30:

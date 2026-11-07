@@ -1,11 +1,12 @@
 import joblib
 
 from .common import charts, load_csv, metrics, normalize, prepare, split_indices
+from .paths import WORK
 
 
 def evaluate_bundle():
-    bundle = joblib.load("/work/model.joblib")
-    frame, y, _, _, _ = prepare(load_csv("/work/input.csv"), bundle["plan"])
+    bundle = joblib.load(WORK / "model.joblib")
+    frame, y, _, _, _ = prepare(load_csv(WORK / "input.csv"), bundle["plan"])
     _, _, test = split_indices(frame, y, bundle["plan"])
     x = normalize(frame, bundle["features"], bundle["numeric"])
     scores = bundle["pipeline"].predict_proba(x.iloc[test])[:, 1]
@@ -13,7 +14,7 @@ def evaluate_bundle():
 
 
 def run(payload):
-    bundle = joblib.load("/work/model.joblib")
+    bundle = joblib.load(WORK / "model.joblib")
     if not bundle["plan"].get("test_fraction", 0.2):
         return {
             "model": bundle["plan"]["model"],

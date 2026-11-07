@@ -37,6 +37,12 @@ Users remain involved throughout. Each training round presents a complete plan f
 
 The application produces interactive charts, computed metrics, downloadable execution code, fitted models, and prediction CSVs. A dataset-specific progress report can be requested at any stage in Markdown and DOCX format, including before training. Reports summarize completed work rather than triggering new training or evaluation.
 
+Reports use a scientific format for human readers: an English summary and interpretation, data-quality tables, readable modeling methods, separate training/validation/test results, numbered figures with explanatory captions, and limitations. Configuration JSON and full execution receipts are kept out of the report narrative. An illustrated report ZIP includes Markdown, figure images, and the DOCX when conversion succeeds, so downloaded Markdown retains its illustrations. Short explanatory Python examples may appear when useful; code is not added by default.
+
+Uploads sit in a compact bar above the workspace. Conversation and results remain visible side by side on larger screens, with independent scrolling; the results pane appears after the first completed task. On narrow screens the two panes stack vertically.
+
+Each completed task offers two code downloads: **task script (.py)** is the exact entry script executed in the sandbox; **standalone experiment (.zip)** includes that script, the runtime source captured inside the executing container, pinned installed dependencies, the task's input data (including its fitted model when needed), and local run instructions. Extract the ZIP, create a Python 3.12 environment, install `requirements.txt`, and run `python run.py`. Outputs go to `data/out/`; no backend, Docker, or inference credentials are required. Local replay runs outside the application's sandbox. The original execution receipt is available separately. Downloads remain subject to the session's size and lifetime limits.
+
 ## Workflow
 
 ```mermaid

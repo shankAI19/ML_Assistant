@@ -6,30 +6,8 @@ import { renderChat } from "./components/chat.js";
 import { renderApproval } from "./components/approval.js";
 import { renderResults, clearResults } from "./components/results.js";
 import { wireUploads } from "./components/upload.js";
+import { showResults } from "./layout.js";
 
-let activeView = "conversation";
-function showView(view) {
-  activeView = view;
-  document.querySelector(".conversation-panel").hidden =
-    view !== "conversation";
-  document.querySelector(".results-panel").hidden = view !== "results";
-  document
-    .querySelector("#conversation-tab")
-    .setAttribute("aria-pressed", String(view === "conversation"));
-  document
-    .querySelector("#results-tab")
-    .setAttribute("aria-pressed", String(view === "results"));
-  if (view === "results") {
-    document.querySelector("#results-tab").classList.remove("has-new-results");
-    window.dispatchEvent(new Event("resize"));
-  }
-}
-document
-  .querySelector("#conversation-tab")
-  .addEventListener("click", () => showView("conversation"));
-document
-  .querySelector("#results-tab")
-  .addEventListener("click", () => showView("results"));
 document.title = config.appTitle;
 document.querySelector("#app-title").textContent = config.appTitle;
 
@@ -52,8 +30,7 @@ function stop() {
   document.querySelector("#prediction-status").textContent = "Session ended";
   document.querySelector("#prediction-upload").hidden = true;
   clearResults();
-  showView("conversation");
-  document.querySelector("#results-tab").hidden = true;
+  showResults(false);
   document.querySelector("#send-message").disabled = true;
   document.querySelector("#training-file").disabled = true;
   document.querySelector("#prediction-file").disabled = true;
@@ -108,7 +85,8 @@ async function update() {
     snapshot.busy || !!snapshot.pending;
   if (
     snapshot.dataset_uploaded &&
-    !document.querySelector("#training-status").textContent.includes("uploaded")
+    document.querySelector("#training-status").textContent ===
+      "No dataset uploaded"
   )
     document.querySelector("#training-status").textContent =
       "Training CSV uploaded";
@@ -116,9 +94,7 @@ async function update() {
   const resultSignature = snapshot.runs.map((run) => run.id).join();
   if (resultSignature !== state.resultsSignature) {
     state.resultsSignature = resultSignature;
-    document.querySelector("#results-tab").hidden = !snapshot.runs.length;
-    if (snapshot.runs.length && activeView !== "results")
-      document.querySelector("#results-tab").classList.add("has-new-results");
+    showResults(snapshot.runs.length > 0);
     await renderResults(snapshot.runs);
   }
 }

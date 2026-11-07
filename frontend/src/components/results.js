@@ -122,9 +122,27 @@ export async function renderResults(runs) {
       link.href = artifactUrl(run.id, filename);
       links.append(link);
     }
-    const code = element("a", "text-button", "Download executed code ↗");
+    const code = element("a", "text-button", "Download task script (.py)");
+    if (run.artifacts.includes("report.zip")) {
+      const report = element(
+        "a",
+        "button secondary small",
+        "Download report with figures (.zip)",
+      );
+      report.href = artifactUrl(run.id, "report.zip");
+      links.append(report);
+    }
     code.href = codeUrl(run.id);
     links.append(code);
+    if (run.artifacts.includes("experiment.zip")) {
+      const experiment = element(
+        "a",
+        "button secondary small",
+        "Download standalone experiment (.zip)",
+      );
+      experiment.href = artifactUrl(run.id, "experiment.zip");
+      links.append(experiment);
+    }
     card.append(links);
     const receipt = element("details", "receipt");
     receipt.append(
@@ -135,6 +153,13 @@ export async function renderResults(runs) {
       ),
       element("pre", "code", JSON.stringify(run.receipt, null, 2)),
     );
+    const receiptLink = element(
+      "a",
+      "text-button",
+      "Download execution receipt",
+    );
+    receiptLink.href = artifactUrl(run.id, "receipt.json");
+    receipt.append(receiptLink);
     card.append(receipt);
     panel.append(card);
     for (const filename of run.result.charts || []) {

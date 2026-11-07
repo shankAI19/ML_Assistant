@@ -9,12 +9,11 @@ export function renderChat(messages, busy) {
   if (!messages.length) {
     const greeting = element("div", "welcome");
     greeting.append(
-      element("span", "welcome-symbol", "✳"),
       element("h3", "", "Let’s make sense of your CSV."),
       element(
         "p",
         "",
-        "Tell me your goal—or upload your data and we’ll find a starting point together. We’ll agree on a plan before each training round.",
+        "Upload a CSV above and tell me what you want to predict.",
       ),
     );
     panel.append(greeting);
