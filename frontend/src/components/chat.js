@@ -1,3 +1,4 @@
+import { markdownFragment } from "../markdown.js";
 import { element } from "../state.js";
 
 export function renderChat(messages, busy) {
@@ -13,7 +14,7 @@ export function renderChat(messages, busy) {
       element(
         "p",
         "",
-        "Tell me your goal—or upload your data and we’ll find a starting point together. I’ll explain each step before asking you to approve it.",
+        "Tell me your goal—or upload your data and we’ll find a starting point together. We’ll agree on a plan before each training round.",
       ),
     );
     panel.append(greeting);
@@ -30,11 +31,19 @@ export function renderChat(messages, busy) {
             ? "YOU"
             : "WORKSPACE",
       ),
-      element("div", "message-body", message.content),
+      messageBody(message),
     );
     panel.append(item);
   }
   if (busy)
     panel.append(element("div", "thinking", "Working through the next step…"));
   if (nearBottom || messages.length < 3) panel.scrollTop = panel.scrollHeight;
+}
+
+function messageBody(message) {
+  const body = element("div", "message-body");
+  if (message.role === "assistant")
+    body.append(markdownFragment(message.content));
+  else body.textContent = message.content;
+  return body;
 }

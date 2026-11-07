@@ -1,133 +1,244 @@
+"""Build reports from saved evidence only, without loading or evaluating a model."""
+
 import json
 from pathlib import Path
 
-import matplotlib
+OUT = Path("/work/out")
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
-from docx import Document
-from docx.shared import Inches
-from sklearn.metrics import ConfusionMatrixDisplay, PrecisionRecallDisplay, RocCurveDisplay
 
-from .common import OUT, metrics
-from .evaluate import evaluate_bundle
+def cell(value):
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
+def evidence_markdown(evidence, narrative):
+    lines = ["# Your classification report", "", "Work completed in this temporary session.", ""]
+    if narrative.strip():
+        lines += ["## Interpretation", "", narrative.strip(), ""]
+    if not evidence:
+        lines += ["No analysis or training has been completed yet.", ""]
+    for index, item in enumerate(evidence, 1):
+        result = item["result"]
+        lines += [f"## {index}. {item['task'].title()}", ""]
+        if item["task"] == "profile":
+            lines += [
+                f"Rows: {result.get('rows', 'unknown')}. Duplicates: {result.get('duplicates', 'unknown')}.",
+                "",
+                "| Column | Type | Missing | Unique |",
+                "| --- | --- | --- | --- |",
+            ]
+            for column in result.get("columns", []):
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        cell(column.get(k, "")) for k in ("name", "dtype", "missing", "unique")
+                    )
+                    + " |"
+                )
+            lines.append("")
+        if result.get("plan"):
+            lines += [
+                "### Approved training recipe",
+                "",
+                "```json",
+                json.dumps(result["plan"], indent=2),
+                "```",
+                "",
+                "Learned preprocessing was fitted on training data only.",
+                "",
+            ]
+        if result.get("features"):
+            lines += ["Features: " + ", ".join(cell(v) for v in result["features"]), ""]
+        if result.get("split_counts"):
+            lines += ["Actual partition sizes: " + json.dumps(result["split_counts"]), ""]
+        for label, key in [
+            ("Training", "training_metrics"),
+            ("Validation", "validation_metrics"),
+            ("Test / uploaded labeled data", "metrics"),
+        ]:
+            values = result.get(key)
+            if isinstance(values, dict):
+                lines += [f"### {label} metrics", "", "| Metric | Value |", "| --- | --- |"]
+                for name, value in values.items():
+                    display = (
+                        "Unavailable"
+                        if value is None
+                        else f"{value:.4f}"
+                        if isinstance(value, float)
+                        else str(value)
+                    )
+                    lines.append(f"| {cell(name.replace('_', ' '))} | {display} |")
+                lines.append("")
+        if item["task"] == "predict":
+            lines += [
+                f"Prediction rows: {result.get('rows')}. Alert rate: {result.get('alert_rate')}.",
+                "",
+            ]
+        if result.get("note"):
+            lines += [result["note"], ""]
+        for warning in result.get("warnings", []):
+            lines.append(f"- {warning}")
+        lines += [
+            "",
+            "Execution evidence: " + json.dumps(item.get("receipt", {}), sort_keys=True),
+            "",
+        ]
+    tasks = {item["task"] for item in evidence}
+    lines += ["## Work remaining and limitations", ""]
+    if "train" not in tasks:
+        lines.append("- No model has been trained.")
+    if "evaluate" not in tasks:
+        lines.append("- The model has not been finalized.")
+    if not any(isinstance(item["result"].get("metrics"), dict) for item in evidence):
+        lines.append(
+            "- No test performance has been measured. Validation describes development performance only."
+        )
+    lines += [
+        "- Unlabeled data supports predictions, not label-dependent performance metrics.",
+        "- Scores are uncalibrated unless calibration was explicitly assessed. Average precision is not trapezoidal PR area.",
+        "- Leakage requires domain review; observed results do not guarantee future performance.",
+        "- Download outputs before ending the session. All session data is temporary.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def add_inline(paragraph, token):
+    bold = italic = False
+    for child in token.children or []:
+        if child.type == "strong_open":
+            bold = True
+        elif child.type == "strong_close":
+            bold = False
+        elif child.type == "em_open":
+            italic = True
+        elif child.type == "em_close":
+            italic = False
+        elif child.type in {"text", "code_inline"}:
+            run = paragraph.add_run(child.content)
+            run.bold, run.italic = bold, italic
+            if child.type == "code_inline":
+                run.font.name = "Consolas"
+        elif child.type in {"softbreak", "hardbreak"}:
+            paragraph.add_run("\n")
+
+
+def to_docx(markdown, plots):
+    from docx import Document
+    from docx.shared import Inches, Pt
+    from markdown_it import MarkdownIt
+
+    document = Document()
+    document.styles["Normal"].font.size = Pt(11)
+    tokens = MarkdownIt("commonmark").enable("table").parse(markdown)
+    paragraph = table = row = None
+    list_style = None
+    column = 0
+    for token in tokens:
+        kind = token.type
+        if kind == "heading_open":
+            paragraph = document.add_heading(level=min(int(token.tag[1:]), 4))
+        elif kind == "bullet_list_open":
+            list_style = "List Bullet"
+        elif kind == "ordered_list_open":
+            list_style = "List Number"
+        elif kind in {"bullet_list_close", "ordered_list_close"}:
+            list_style = None
+        elif kind == "paragraph_open":
+            paragraph = document.add_paragraph(style=list_style)
+        elif kind == "table_open":
+            table = document.add_table(rows=0, cols=0)
+            table.style = "Light Shading Accent 1"
+        elif kind == "tr_open":
+            row, column = table.add_row(), 0
+        elif kind in {"th_open", "td_open"}:
+            if column >= len(table.columns):
+                table.add_column(Inches(2.5))
+            paragraph = row.cells[column].paragraphs[0]
+            column += 1
+        elif kind == "table_close":
+            width = Inches(6 / max(1, len(table.columns)))
+            for grid_column in table.columns:
+                grid_column.width = width
+            for table_row in table.rows:
+                for table_cell in table_row.cells:
+                    table_cell.width = width
+        elif kind == "inline":
+            if paragraph is None:
+                paragraph = document.add_paragraph()
+            add_inline(paragraph, token)
+        elif kind in {"fence", "code_block"}:
+            paragraph = document.add_paragraph()
+            run = paragraph.add_run(token.content)
+            run.font.name = "Consolas"
+            run.font.size = Pt(9)
+    if plots:
+        document.add_heading("Saved evaluation plots", level=1)
+        for path in plots:
+            document.add_picture(str(path), width=Inches(5.8))
+    document.save(OUT / "report.docx")
+
+
+def saved_plots():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    paths = []
+    for source in sorted(Path("/work").glob("chart_*.json"))[-6:]:
+        figure = None
+        try:
+            definition = json.loads(source.read_text(encoding="utf-8"))
+            figure, axis = plt.subplots(figsize=(7, 4))
+            for trace in definition["data"]:
+                if trace.get("type") == "heatmap":
+                    axis.imshow(trace["z"], cmap="Blues")
+                    for r, values in enumerate(trace["z"]):
+                        for c, value in enumerate(values):
+                            axis.text(c, r, str(value), ha="center", va="center")
+                    axis.set_xticks(range(len(trace["x"])), trace["x"])
+                    axis.set_yticks(range(len(trace["y"])), trace["y"])
+                else:
+                    axis.plot(trace["x"], trace["y"], label=trace.get("name", ""))
+            layout = definition.get("layout", {})
+            stage = {
+                "train": "Validation",
+                "evaluate": "Held-out test",
+                "predict": "Uploaded labeled data",
+            }.get(source.name.split("_")[2], "Saved results")
+            axis.set_title(f"{stage}: {layout.get('title', {}).get('text', source.stem)}")
+            axis.set_xlabel(layout.get("xaxis", {}).get("title", {}).get("text", ""))
+            axis.set_ylabel(layout.get("yaxis", {}).get("title", {}).get("text", ""))
+            if axis.lines:
+                axis.legend()
+            figure.tight_layout()
+            path = OUT / f"saved_{len(paths)}.png"
+            figure.savefig(path, dpi=120)
+            paths.append(path)
+        except Exception:  # noqa: BLE001, S110 - a malformed saved chart must not prevent a report
+            pass
+        finally:
+            if figure is not None:
+                plt.close(figure)
+    return paths
 
 
 def run(payload):
-    bundle, y, scores = evaluate_bundle()
-    plan = bundle["plan"]
-    observed = metrics(y, scores, plan["threshold"])
     evidence = json.loads(Path("/work/evidence.json").read_text(encoding="utf-8"))
-    document = Document()
-    section = document.sections[0]
-    section.header.paragraphs[0].text = "ML ASSISTANT  /  FINAL EXPERIMENT REPORT"
-    document.add_heading("Your classification report", 0)
-    document.add_paragraph(f"Target: {plan['target']}  |  Positive event: {plan['positive_label']}")
-    document.add_heading("What we learned", level=1)
-    for paragraph in payload["narrative"].split("\n\n"):
-        if paragraph.strip():
-            document.add_paragraph(paragraph.strip())
-    document.add_heading("Dataset and preparation", level=1)
-    profile = next((e["result"] for e in evidence if e["task"] == "profile"), {})
-    document.add_paragraph(
-        f"Uploaded rows: {profile.get('rows', 'unknown')}. Features used: {len(bundle['features'])}. "
-        "Missing numeric values were imputed from training medians; categorical values were imputed and one-hot encoded. "
-        "Numeric scaling was applied for logistic regression. All preprocessing was fitted on training data only."
-    )
-    document.add_paragraph(
-        f"Model: {plan['model']}. Split: {plan['split']}. Seed: {plan['seed']}. "
-        f"Positive-class weighting: {plan['class_weighted']}. Decision threshold: {plan['threshold']}."
-    )
-    document.add_paragraph("Features: " + ", ".join(bundle["features"]))
-    document.add_paragraph(
-        "Excluded columns: " + (", ".join(plan["excluded_columns"]) or "None explicitly selected")
-    )
-    document.add_heading("Computed performance", level=1)
-    table = document.add_table(rows=1, cols=3)
-    table.style = "Light Shading Accent 1"
-    for cell, title in zip(
-        table.rows[0].cells, ["Metric", "Development validation", "Held-out test"]
-    ):
-        cell.text = title
-    for key in [
-        "rows",
-        "positives",
-        "prevalence",
-        "accuracy",
-        "balanced_accuracy",
-        "precision",
-        "recall",
-        "specificity",
-        "f1",
-        "roc_auc",
-        "average_precision",
-        "alert_rate",
-        "false_positives_per_1000",
-    ]:
-        row = table.add_row().cells
-        row[0].text = key.replace("_", " ").title()
-        for cell, value in zip(row[1:], [bundle["validation_metrics"].get(key), observed.get(key)]):
-            cell.text = (
-                "Unavailable"
-                if value is None
-                else f"{value:.4f}"
-                if isinstance(value, float)
-                else str(value)
-            )
-    document.add_paragraph(
-        "Average precision is calculated using sklearn.metrics.average_precision_score; it is not trapezoidal PR area. "
-        "Validation informed model selection. Test results were obtained after the recipe was frozen. "
-        "The evaluated model was retained without a full-data refit."
-    )
-    sns.set_theme(style="whitegrid")
-    for name, display in [("roc", RocCurveDisplay), ("precision_recall", PrecisionRecallDisplay)]:
-        figure, axis = plt.subplots(figsize=(6, 3.5))
-        display.from_predictions(y, scores, ax=axis)
-        figure.tight_layout()
-        path = OUT / f"{name}.png"
-        figure.savefig(path, dpi=140)
-        plt.close(figure)
-        document.add_picture(str(path), width=Inches(5.8))
-    figure, axis = plt.subplots(figsize=(5, 3.5))
-    ConfusionMatrixDisplay.from_predictions(
-        y,
-        scores >= plan["threshold"],
-        ax=axis,
-        colorbar=False,
-        display_labels=["Negative", "Positive"],
-    )
-    figure.tight_layout()
-    figure.savefig(OUT / "confusion.png", dpi=140)
-    plt.close(figure)
-    document.add_picture(str(OUT / "confusion.png"), width=Inches(5.3))
-    predictions = [e["result"] for e in evidence if e["task"] == "predict"]
-    if predictions:
-        document.add_heading("Uploaded prediction data", level=1)
-        for prediction in predictions:
-            document.add_paragraph(
-                f"Rows: {prediction['rows']}; alert rate: {prediction['alert_rate']:.4f}. {prediction['note']}"
-            )
-            if prediction.get("metrics"):
-                document.add_paragraph(json.dumps(prediction["metrics"], indent=2))
-    document.add_heading("Limitations and next steps", level=1)
-    for warning in bundle["warnings"]:
-        document.add_paragraph(warning, style="List Bullet")
-    document.add_paragraph(
-        "Feature leakage requires domain review. Results describe these data partitions and do not guarantee future performance. "
-        "Download this report and other artifacts before ending your session. Server-side session data is temporary."
-    )
-    document.add_heading("Execution evidence", level=1)
-    for item in evidence:
-        receipt = item["receipt"]
-        document.add_paragraph(
-            f"{item['task']}: {receipt['elapsed_seconds']} seconds; network disabled; "
-            f"memory cap {receipt['memory_mb']} MiB; sandbox destroyed. "
-            f"Code SHA-256: {receipt['code_sha256']}"
-        )
-    document.save(OUT / "report.docx")
-    return {
-        "report": "report.docx",
-        "test_metrics": observed,
-        "note": "Narrative generated by the agent; tables and plots computed from the frozen model.",
+    markdown = evidence_markdown(evidence, payload.get("narrative", ""))
+    (OUT / "report.md").write_text(markdown, encoding="utf-8")
+    result = {
+        "markdown": "report.md",
+        "report": None,
+        "note": "Report summarizes saved evidence only; no training or new evaluation was performed.",
+        "warnings": [],
     }
+    try:
+        to_docx(markdown, saved_plots())
+        result["report"] = "report.docx"
+    except Exception:  # noqa: BLE001 - preserve the Markdown download on conversion failure
+        (OUT / "report.docx").unlink(missing_ok=True)
+        result["warnings"].append(
+            "DOCX conversion could not complete. Download the complete Markdown report instead."
+        )
+    return result

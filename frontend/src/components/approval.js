@@ -5,15 +5,11 @@ export function renderApproval(pending, onDecision) {
   panel.replaceChildren();
   panel.hidden = !pending;
   if (!pending) return;
-  panel.append(element("div", "eyebrow", "YOUR APPROVAL IS NEEDED"));
+  panel.append(element("div", "eyebrow", "REVIEW YOUR TRAINING ROUND"));
   for (const action of pending.actions) {
     const task = action.args.request;
     panel.append(
-      element(
-        "h3",
-        "",
-        `${task.task[0].toUpperCase()}${task.task.slice(1)} dataset task`,
-      ),
+      element("h3", "", "Training plan"),
       element("p", "", task.explanation),
     );
     if (task.plan) {
@@ -25,6 +21,38 @@ export function renderApproval(pending, onDecision) {
           `${plan.model} · target: ${plan.target} · positive: ${plan.positive_label} · ${plan.split} split · threshold: ${plan.threshold} · weighting: ${plan.class_weighted ? "on" : "off"}`,
         ),
       );
+      const fields = [
+        [
+          "Train / validation / test",
+          `${Math.round((1 - (plan.validation_fraction ?? 0.2) - (plan.test_fraction ?? 0.2)) * 100)}% / ${Math.round((plan.validation_fraction ?? 0.2) * 100)}% / ${Math.round((plan.test_fraction ?? 0.2) * 100)}%`,
+        ],
+        ["Excluded columns", plan.excluded_columns?.join(", ") || "None"],
+        ["Feature expansion", plan.feature_expansion || "none"],
+        ["Polynomial degree", plan.polynomial_degree ?? 2],
+        [
+          "Focus metrics",
+          (
+            plan.focus_metrics || [
+              "average_precision",
+              "precision",
+              "recall",
+              "f1",
+            ]
+          ).join(", "),
+        ],
+        [
+          "Preprocessing",
+          "Training-only imputation, categorical encoding, numeric scaling for logistic regression",
+        ],
+      ];
+      for (const [label, value] of fields)
+        panel.append(element("p", "plan-detail", `${label}: ${value}`));
+      const recipe = element("details");
+      recipe.append(
+        element("summary", "", "Full training recipe"),
+        element("pre", "code", JSON.stringify(plan, null, 2)),
+      );
+      panel.append(recipe);
     }
     const details = element("details");
     details.append(

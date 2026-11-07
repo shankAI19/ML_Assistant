@@ -59,7 +59,7 @@ def prepare(frame, plan):
         raise ValueError(f"Choose one of exactly two target values: {classes[:10]}")
     y = (labels == plan["positive_label"]).astype(int)
     if y.value_counts().min() < 10:
-        raise ValueError("At least 10 examples of each class are needed for train/validation/test")
+        raise ValueError("At least 10 examples of each class are needed for reliable splitting")
     unknown = set(plan["excluded_columns"]) - set(frame.columns)
     if unknown:
         raise ValueError(f"Excluded columns do not exist: {sorted(unknown)}")
@@ -74,21 +74,40 @@ def prepare(frame, plan):
 
 def split_indices(frame, y, plan):
     indices = np.arange(len(frame))
+    test_fraction = plan.get("test_fraction", 0.2)
+    val_fraction = plan.get("validation_fraction", 0.2)
+    if not 0 < val_fraction < 1 or not 0 <= test_fraction < 1 or val_fraction + test_fraction >= 1:
+        raise ValueError("Invalid train/validation/test fractions")
+    test = np.array([], dtype=int)
     if plan["split"] == "stratified":
-        dev, test = train_test_split(indices, test_size=0.2, stratify=y, random_state=plan["seed"])
+        dev = indices
+        if test_fraction:
+            dev, test = train_test_split(
+                indices, test_size=test_fraction, stratify=y, random_state=plan["seed"]
+            )
         train, val = train_test_split(
-            dev, test_size=0.25, stratify=y.iloc[dev], random_state=plan["seed"]
+            dev,
+            test_size=val_fraction / (1 - test_fraction),
+            stratify=y.iloc[dev],
+            random_state=plan["seed"],
         )
     elif plan["split"] == "chronological":
         times = pd.to_datetime(frame[plan["split_column"]], errors="coerce", utc=True)
         if times.isna().any():
             raise ValueError("The time column contains missing or invalid timestamps")
         order = np.argsort(times.to_numpy(), kind="stable")
-        train, val, test = np.split(order, [int(len(order) * 0.6), int(len(order) * 0.8)])
+        train, val, test = np.split(
+            order,
+            [
+                int(len(order) * (1 - val_fraction - test_fraction)),
+                int(len(order) * (1 - test_fraction)),
+            ],
+        )
+        if not len(train) or not len(val) or (test_fraction and not len(test)):
+            raise ValueError("Split fractions leave an empty partition")
         # Identical timestamps must not cross a partition boundary.
-        if (
-            times.iloc[train].max() >= times.iloc[val].min()
-            or times.iloc[val].max() >= times.iloc[test].min()
+        if times.iloc[train].max() >= times.iloc[val].min() or (
+            len(test) and times.iloc[val].max() >= times.iloc[test].min()
         ):
             raise ValueError(
                 "Tied timestamps cross split boundaries; choose a dataset with a clear time boundary"
@@ -97,18 +116,22 @@ def split_indices(frame, y, plan):
         groups = frame[plan["split_column"]]
         if groups.isna().any():
             raise ValueError("The grouping column contains missing values")
-        dev_local, test = next(
-            GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=plan["seed"]).split(
-                indices, y, groups
+        dev_local = indices
+        if test_fraction:
+            dev_local, test = next(
+                GroupShuffleSplit(
+                    n_splits=1, test_size=test_fraction, random_state=plan["seed"]
+                ).split(indices, y, groups)
             )
-        )
         train_local, val_local = next(
-            GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=plan["seed"]).split(
-                dev_local, y.iloc[dev_local], groups.iloc[dev_local]
-            )
+            GroupShuffleSplit(
+                n_splits=1, test_size=val_fraction / (1 - test_fraction), random_state=plan["seed"]
+            ).split(dev_local, y.iloc[dev_local], groups.iloc[dev_local])
         )
         train, val = dev_local[train_local], dev_local[val_local]
     for name, subset in [("train", train), ("validation", val), ("test", test)]:
+        if name == "test" and not test_fraction:
+            continue
         if (
             len(subset) == 0
             or y.iloc[subset].nunique() != 2

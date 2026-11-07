@@ -5,10 +5,16 @@ from langchain.agents.middleware import HumanInTheLoopMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .llm import build_llm
+from .schemas import TaskRequest
 from .tools import make_tools
 
 
 def build_agent(settings, session, workspace, runner):
+    def needs_training_approval(call):
+        request = TaskRequest.model_validate(call.tool_call["args"]["request"])
+        # Only an identical failed round can reuse its approval, within the same turn.
+        return not (session.failed_runs and request.payload() == session.approved_training)
+
     checkpointer = InMemorySaver()
     prompt = (Path(__file__).parent / "prompts" / "agent.txt").read_text(encoding="utf-8")
     prompt += "\nReport writing instructions:\n" + (
@@ -22,7 +28,10 @@ def build_agent(settings, session, workspace, runner):
         middleware=[
             HumanInTheLoopMiddleware(
                 interrupt_on={
-                    "execute_ml_task": {"allowed_decisions": ["approve", "reject"]},
+                    "train_model": {
+                        "allowed_decisions": ["approve", "reject"],
+                        "when": needs_training_approval,
+                    },
                 }
             )
         ],

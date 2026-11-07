@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, PolynomialFeatures, StandardScaler
 
 from .common import OUT, charts, load_csv, metrics, normalize, prepare, split_indices
 
@@ -25,7 +25,22 @@ def run(payload):
         raise ValueError("Demo limit: 50 categorical features")
     x = normalize(frame, features, numeric)
     numeric_steps = [("impute", SimpleImputer(strategy="median", keep_empty_features=True))]
+    numeric_feature_count = len(numeric)
     if plan["model"] == "logistic":
+        expansion = plan.get("feature_expansion", "none")
+        if expansion != "none" and numeric:
+            polynomial = PolynomialFeatures(
+                degree=plan.get("polynomial_degree", 2),
+                interaction_only=expansion == "interaction_only",
+                include_bias=False,
+            )
+            polynomial.fit([[0] * len(numeric)])
+            if polynomial.n_output_features_ > 2000:
+                raise ValueError(
+                    "Feature expansion exceeds 2,000 numeric features; reduce degree or exclude columns"
+                )
+            numeric_feature_count = polynomial.n_output_features_
+            numeric_steps.append(("expand", polynomial))
         numeric_steps.append(("scale", StandardScaler()))
     prep = ColumnTransformer(
         [
@@ -102,9 +117,9 @@ def run(payload):
     )
     warnings = [
         "Scores are not calibrated probabilities.",
-        "Repeated validation-based refinement can overfit validation data; final test data is reserved.",
+        "Repeated validation-based refinement can overfit validation data. Use an untouched test set for a final assessment.",
     ]
-    if any(y.iloc[part].sum() < 20 for part in (train, val, test)):
+    if any(y.iloc[part].sum() < 20 for part in (train, val, test) if len(part)):
         warnings.append("Some splits contain fewer than 20 positives; results may be unstable.")
     if dropped or removed_duplicates:
         warnings.append(
@@ -125,6 +140,7 @@ def run(payload):
         "model": plan["model"],
         "plan": plan,
         "features": features,
+        "numeric_features_after_expansion": numeric_feature_count,
         "training_metrics": training,
         "validation_metrics": validation,
         "baseline": {
@@ -136,5 +152,7 @@ def run(payload):
         "charts": charts(y.iloc[val], scores, plan["threshold"]),
         "warnings": warnings,
         "evaluation_partition": "validation",
-        "test_metrics": "Withheld until final approval",
+        "test_metrics": "Withheld until finalization"
+        if len(test)
+        else "No internal test set reserved",
     }

@@ -42,17 +42,25 @@ export async function renderResults(runs) {
       run.result.test_metrics;
     if (metrics && typeof metrics === "object") {
       const grid = element("div", "metrics");
-      for (const key of [
-        "average_precision",
-        "precision",
-        "recall",
-        "f1",
-        "roc_auc",
-        "specificity",
-        "accuracy",
-        "alert_rate",
-      ]) {
+      const metricOrder = [
+        ...new Set([
+          ...(run.result.plan?.focus_metrics || []),
+          "average_precision",
+          "precision",
+          "recall",
+          "f1",
+          "roc_auc",
+          "specificity",
+          "accuracy",
+          "balanced_accuracy",
+          "alert_rate",
+        ]),
+      ];
+      for (const key of metricOrder) {
         const tile = element("div", "metric");
+        if (key === "alert_rate")
+          tile.title =
+            "Fraction of rows predicted positive at the selected threshold; this is not a measure of correctness.";
         tile.append(
           element("span", "", key.replaceAll("_", " ")),
           element("strong", "", format(metrics[key])),
@@ -108,7 +116,7 @@ export async function renderResults(runs) {
       card.append(element("p", "small warning", warning));
     const links = element("div", "downloads");
     for (const filename of run.artifacts.filter((name) =>
-      /\.(docx|csv|joblib)$/.test(name),
+      /\.(docx|md|csv|joblib)$/.test(name),
     )) {
       const link = element("a", "button secondary small", `↓ ${filename}`);
       link.href = artifactUrl(run.id, filename);
@@ -146,9 +154,9 @@ export async function renderResults(runs) {
           {
             ...figure.layout,
             autosize: true,
-            height: 310,
+            height: 400,
             margin: { l: 65, r: 20, t: 55, b: 65 },
-            font: { family: "system-ui", color: "#314745", size: 11 },
+            font: { family: "system-ui", color: "#314745", size: 14 },
             paper_bgcolor: "#ffffff",
             plot_bgcolor: "#ffffff",
             colorway: ["#14685e", "#bc9c65", "#738fa2", "#b57066"],

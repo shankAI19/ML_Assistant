@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="A guided machine learning workbench. Understand your CSV, approve each step, and leave with a model and a report."
+      content="A guided machine learning workbench. Understand your CSV, approve your training plan, and leave with a model and a report."
     />
     <title>ML Assistant</title>
   </head>
@@ -25,12 +25,12 @@
     <main class="workspace">
       <aside class="sidebar">
         <div class="eyebrow">YOUR WORKSPACE</div>
-        <h1>From data<br />to understanding.</h1>
+        <h1>Data Lab</h1>
         <p class="muted intro">
           A little guidance.<br />A model you can explain.
         </p>
         <section class="upload-card">
-          <div class="section-label"><span>01</span> Your dataset</div>
+          <div class="section-label">Your dataset</div>
           <label class="dropzone" for="training-file"
             ><span class="upload-icon">↥</span><strong>Choose a CSV</strong
             ><span id="upload-hint"
@@ -45,36 +45,9 @@
           />
           <p id="training-status" class="file-status">No dataset uploaded</p>
         </section>
-        <section class="steps" aria-label="Workflow stages">
-          <div class="step" data-stage="profile">
-            <span class="step-number">1</span>
-            <div>
-              <strong>Understand the data</strong
-              ><small>Types, missing values, target</small>
-            </div>
-          </div>
-          <div class="step" data-stage="train">
-            <span class="step-number">2</span>
-            <div>
-              <strong>Build & refine</strong
-              ><small>Approve an experiment</small>
-            </div>
-          </div>
-          <div class="step" data-stage="evaluate">
-            <span class="step-number">3</span>
-            <div>
-              <strong>Finalize & test</strong
-              ><small>One untouched test split</small>
-            </div>
-          </div>
-          <div class="step" data-stage="report">
-            <span class="step-number">4</span>
-            <div>
-              <strong>Take it with you</strong
-              ><small>Predictions and a final report</small>
-            </div>
-          </div>
-        </section>
+        <p class="muted small">
+          Upload your data and tell your guide what you want to predict.
+        </p>
         <section id="prediction-upload" class="prediction-upload" hidden>
           <label for="prediction-file" class="button secondary full"
             >Upload prediction CSV</label
@@ -101,85 +74,97 @@
           </p>
         </div>
       </aside>
-      <section class="conversation-panel">
-        <div class="panel-header">
-          <div>
-            <span class="eyebrow">LET’S WORK THROUGH IT</span>
-            <h2>Your ML guide</h2>
+      <div class="work-area">
+        <nav class="view-tabs" aria-label="Workspace views">
+          <button id="conversation-tab" aria-pressed="true" type="button">
+            Conversation</button
+          ><button id="results-tab" aria-pressed="false" type="button" hidden>
+            Results
+          </button>
+        </nav>
+        <section class="conversation-panel">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">LET’S WORK THROUGH IT</span>
+              <h2>Your ML guide</h2>
+            </div>
+            <span id="agent-status" class="status-pill">Connecting</span>
           </div>
-          <span id="agent-status" class="status-pill">Connecting</span>
-        </div>
-        <div id="notice" class="notice" role="status" hidden></div>
-        <div
-          id="messages"
-          class="messages"
-          aria-live="polite"
-          aria-label="Conversation"
-        ></div>
-        <section
-          id="approval-panel"
-          class="approval-panel"
-          hidden
-          aria-label="Action awaiting approval"
-        ></section>
-        <div class="composer-area">
-          <div id="suggestions" class="suggestions">
-            <button
-              data-prompt="Please inspect my dataset and help me decide where to start."
-            >
-              Help me get started ↗</button
-            ><button
-              data-prompt="How do you handle missing values and different feature types?"
-            >
-              Explain the process ↗
-            </button>
-          </div>
-          <form id="chat-form" class="composer">
-            <label class="sr-only" for="message">Your message</label
-            ><textarea
-              id="message"
-              rows="2"
-              placeholder="Tell me what you’d like to predict…"
-              maxlength="6000"
-              required
-            ></textarea
-            ><button
-              id="send-message"
-              class="send-button"
-              type="submit"
-              aria-label="Send message"
-            >
-              ↑
-            </button>
-          </form>
-          <p class="composer-caption">
-            You stay in control. Every execution needs your approval.
-          </p>
-        </div>
-      </section>
-      <section class="results-panel">
-        <div class="panel-header">
-          <div>
-            <span class="eyebrow">EVIDENCE, NOT GUESSWORK</span>
-            <h2>Results & artifacts</h2>
-          </div>
-          <span id="run-count" class="counter">0 runs</span>
-        </div>
-        <div id="results" class="results-content">
-          <div class="empty-state">
-            <div class="empty-graphic"><i></i><i></i><i></i><i></i><i></i></div>
-            <h3>Your data has a story.</h3>
-            <p>
-              Upload a CSV and talk with your guide.<br />Executed results will
-              appear here.
+          <div id="notice" class="notice" role="status" hidden></div>
+          <div
+            id="messages"
+            class="messages"
+            aria-live="polite"
+            aria-label="Conversation"
+          ></div>
+          <section
+            id="approval-panel"
+            class="approval-panel"
+            hidden
+            aria-label="Action awaiting approval"
+          ></section>
+          <div class="composer-area">
+            <div id="suggestions" class="suggestions">
+              <button
+                data-prompt="Please inspect my dataset and help me decide where to start."
+              >
+                Help me get started ↗</button
+              ><button
+                data-prompt="How do you handle missing values and different feature types?"
+              >
+                Explain the process ↗
+              </button>
+            </div>
+            <form id="chat-form" class="composer">
+              <label class="sr-only" for="message">Your message</label
+              ><textarea
+                id="message"
+                rows="2"
+                placeholder="Tell me what you’d like to predict…"
+                maxlength="6000"
+                required
+              ></textarea
+              ><button
+                id="send-message"
+                class="send-button"
+                type="submit"
+                aria-label="Send message"
+              >
+                ↑
+              </button>
+            </form>
+            <p class="composer-caption">
+              You stay in control. Approve each training round. Ask questions
+              and request reports anytime.
             </p>
-            <div class="feature-tags">
-              <span>Interactive charts</span><span>Downloadable code</span
-              ><span>DOCX report</span>
+          </div>
+        </section>
+        <section class="results-panel" hidden>
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">EVIDENCE, NOT GUESSWORK</span>
+              <h2>Results & artifacts</h2>
+            </div>
+            <span id="run-count" class="counter">0 runs</span>
+          </div>
+          <div id="results" class="results-content">
+            <div class="empty-state">
+              <div class="empty-graphic">
+                <i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <h3>Your data has a story.</h3>
+              <p>
+                Upload a CSV and talk with your guide.<br />Executed results
+                will appear here.
+              </p>
+              <div class="feature-tags">
+                <span>Interactive charts</span><span>Downloadable code</span
+                ><span>DOCX report</span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
     <script type="module" src="/src/app.js"></script>
   </body>

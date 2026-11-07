@@ -17,6 +17,27 @@ class ExperimentPlan(BaseModel):
     split: Literal["stratified", "chronological", "group"] = "stratified"
     split_column: str | None = None
     seed: int = Field(42, ge=0, le=2**31 - 1)
+    validation_fraction: float = Field(0.2, gt=0, lt=1)
+    test_fraction: float = Field(0.2, ge=0, lt=1)
+    feature_expansion: Literal["none", "polynomial", "interaction_only"] = "none"
+    polynomial_degree: int = Field(2, ge=2, le=3)
+    focus_metrics: list[
+        Literal[
+            "average_precision",
+            "precision",
+            "recall",
+            "specificity",
+            "accuracy",
+            "balanced_accuracy",
+            "f1",
+            "roc_auc",
+            "alert_rate",
+        ]
+    ] = Field(
+        default_factory=lambda: ["average_precision", "precision", "recall", "f1"],
+        min_length=1,
+        max_length=9,
+    )
     # Keep the demo's search space small and explicit.
     trees: int = Field(150, ge=20, le=500)
     max_depth: int = Field(5, ge=2, le=12)
@@ -25,6 +46,10 @@ class ExperimentPlan(BaseModel):
 
     @model_validator(mode="after")
     def check_columns(self):
+        if self.validation_fraction + self.test_fraction >= 1:
+            raise ValueError("Validation and test fractions must leave training data")
+        if self.feature_expansion != "none" and self.model != "logistic":
+            raise ValueError("Feature expansion is supported for logistic regression")
         if self.target in self.excluded_columns:
             raise ValueError("The target cannot be an excluded feature")
         if self.split != "stratified" and not self.split_column:
@@ -73,7 +98,7 @@ class TaskRequest(BaseModel):
             if (
                 not valid_import
                 or not valid_call
-                or ast.literal_eval(call.args[0]) != self.payload()
+                or not self.matches_payload(ast.literal_eval(call.args[0]))
             ):
                 raise ValueError("Code must call execute with exactly the approved task payload")
         except (SyntaxError, ValueError, TypeError, AttributeError) as exc:
@@ -81,6 +106,16 @@ class TaskRequest(BaseModel):
                 "Use only: from ml_runtime import execute; execute(<literal payload>)"
             ) from exc
         return self
+
+    def matches_payload(self, payload):
+        if not isinstance(payload, dict) or set(payload) != {"task", "plan", "narrative"}:
+            return False
+        if payload["plan"] is not None:
+            payload = {
+                **payload,
+                "plan": ExperimentPlan.model_validate(payload["plan"]).model_dump(),
+            }
+        return payload == self.payload()
 
 
 class ChatRequest(BaseModel):

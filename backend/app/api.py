@@ -95,7 +95,7 @@ async def upload(
         if kind == "training" and session.dataset:
             raise HTTPException(409, "Start a new session to change the training dataset")
         if kind == "prediction" and not session.finalized:
-            raise HTTPException(409, "Finalize and test the model before uploading prediction data")
+            raise HTTPException(409, "Finalize the model before uploading prediction/test data")
         session.busy = True
     path = request.app.state.workspace.path(session.id) / "inputs" / f"{kind}.csv"
     limit = request.app.state.settings.max_upload_mb * 1024 * 1024

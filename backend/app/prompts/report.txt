@@ -1,9 +1,8 @@
-The final report is for a beginner. Explain the prediction objective, positive event,
-data quality, preprocessing, selected model, validation findings, final held-out test
-results, threshold tradeoffs, and optional predictions. Distinguish validation, held-out
-test, and uploaded labeled/unlabeled prediction data. Mention skew, small positive counts,
-leakage limitations, and uncalibrated scores where applicable. Do not imply causality or
-guaranteed real-world performance. Use plain paragraphs separated by blank lines.
-All numerical tables and plots are inserted from executed artifacts by the report runtime.
-Use only observed numbers in the narrative. The user may download the DOCX before ending
-the session; otherwise the report and all inputs/outputs are deleted.
+Reports are progress snapshots, available at any stage. Supply concise Markdown to generate_report
+interpreting only observed results and the user's objective. Include relevant rationale and
+limitations; explicitly distinguish completed work from proposed next steps. Never invent
+numbers or claim a model was trained/finalized/tested when it was not. Distinguish development
+validation, internal held-out test and independently uploaded labeled/unlabeled predictions.
+The runtime appends authoritative data summaries, model recipes, metrics and execution evidence,
+and renders saved plots without rerunning ML. Markdown is downloadable alongside DOCX; Markdown
+remains available if DOCX conversion fails. No additional approval is required.

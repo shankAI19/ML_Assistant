@@ -31,6 +31,12 @@ class Workflow:
             if approval:
                 if not session.pending or session.pending["id"] != approval.approval_id:
                     raise ValueError("Approval expired or was already used")
+                if approval.decision == "approve":
+                    from .schemas import TaskRequest
+
+                    session.approved_training = TaskRequest.model_validate(
+                        session.pending["actions"][0]["args"]["request"]
+                    ).payload()
                 decisions = [
                     {
                         "type": approval.decision,
@@ -60,6 +66,7 @@ class Workflow:
                         "Approve or request a revision before continuing the conversation"
                     )
                 session.failed_runs = 0
+                session.approved_training = None
                 session.messages.append({"role": "user", "content": message})
                 context = {
                     "training_csv_uploaded": bool(session.dataset),
@@ -119,7 +126,8 @@ class Workflow:
                     from .schemas import TaskRequest
 
                     for action in actions:
-                        TaskRequest.model_validate(action["args"]["request"])
+                        validated = TaskRequest.model_validate(action["args"]["request"])
+                        action["args"]["request"] = validated.model_dump()
                     session.pending = {"id": new_id(), "actions": actions}
                     session.status = "approval_required"
                 else:

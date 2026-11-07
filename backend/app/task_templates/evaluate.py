@@ -13,6 +13,15 @@ def evaluate_bundle():
 
 
 def run(payload):
+    bundle = joblib.load("/work/model.joblib")
+    if not bundle["plan"].get("test_fraction", 0.2):
+        return {
+            "model": bundle["plan"]["model"],
+            "metrics": None,
+            "charts": [],
+            "warnings": bundle["warnings"],
+            "note": "Model finalized without an internal test set. Upload independent labeled data for test performance; unlabeled data supports predictions only.",
+        }
     bundle, y, scores = evaluate_bundle()
     return {
         "evaluation_partition": "held-out test",

@@ -35,6 +35,7 @@ class Session:
     runs: list = field(default_factory=list)
     invocations: int = 0
     failed_runs: int = 0
+    approved_training: dict | None = None
 
 
 class SessionStore:

@@ -60,7 +60,9 @@ def test_train_test_predict_and_report_inside_docker(docker_runner, model):
     assert json.loads(predicted["result.json"])["metrics"] is None
     assert b"positive_class_score" in predicted["predictions.csv"]
     evidence = [
-        {"task": "profile", "result": json.loads(artifacts["result.json"]), "receipt": receipt}
+        {"task": "profile", "result": json.loads(artifacts["result.json"]), "receipt": receipt},
+        {"task": "train", "result": validation, "receipt": receipt},
+        {"task": "evaluate", "result": result, "receipt": receipt},
     ]
     report, _ = docker_runner.run(
         sid,
@@ -71,12 +73,68 @@ def test_train_test_predict_and_report_inside_docker(docker_runner, model):
         {**inputs, "evidence.json": json.dumps(evidence).encode()},
     )
     assert report["report.docx"].startswith(b"PK")
+    assert b"Your classification report" in report["report.md"]
     assert (
         docker_runner.client.containers.list(
             all=True, filters={"label": f"ml-assistant.session={sid}"}
         )
         == []
     )
+
+
+@pytest.mark.docker
+@pytest.mark.parametrize("split", ["stratified", "group", "chronological"])
+@pytest.mark.parametrize("test_fraction", [0, 0.15])
+def test_flexible_splits_and_feature_expansion_inside_docker(docker_runner, split, test_fraction):
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["amount", "velocity", "channel", "entity", "time", "fraud"])
+    for i in range(1000):
+        writer.writerow(
+            [
+                i % 30,
+                i % 11,
+                "web" if i % 2 else "store",
+                i // 10,
+                f"2025-01-01T00:{i // 60:02}:{i % 60:02}Z",
+                int(i % 5 == 0),
+            ]
+        )
+    source = buffer.getvalue().encode()
+    plan = ExperimentPlan(
+        target="fraud",
+        positive_label="1",
+        split=split,
+        split_column={"group": "entity", "chronological": "time"}.get(split),
+        excluded_columns=["entity", "time"],
+        validation_fraction=0.25,
+        test_fraction=test_fraction,
+        feature_expansion="interaction_only" if test_fraction else "polynomial",
+    ).model_dump()
+    sid = "f" * 32
+    trained, receipt = docker_runner.run(sid, script("train", plan), {"input.csv": source})
+    result = json.loads(trained["result.json"])
+    assert result["numeric_features_after_expansion"] == (3 if test_fraction else 5)
+    assert (
+        result["split_counts"]["test"] == 0
+        if not test_fraction
+        else result["split_counts"]["test"] > 0
+    )
+    if split != "group":
+        assert abs(result["split_counts"]["validation"] - 250) <= 1
+    frozen, _ = docker_runner.run(
+        sid, script("evaluate"), {"input.csv": source, "model.joblib": trained["model.joblib"]}
+    )
+    if not test_fraction:
+        assert json.loads(frozen["result.json"])["metrics"] is None
+    for evidence in [[], [{"task": "train", "result": result, "receipt": receipt}]]:
+        report, _ = docker_runner.run(
+            sid,
+            script("report", narrative="## Findings\nA **saved** progress report."),
+            {"evidence.json": json.dumps(evidence).encode()},
+        )
+        assert report["report.docx"].startswith(b"PK")
+        assert "report.md" in report
 
 
 @pytest.mark.docker
