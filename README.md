@@ -6,7 +6,7 @@
 
 **Turning a dataset and a loosely defined goal into a guided machine learning experiment.**
 
-Many people have useful data and a question they want to answer, but no machine learning background. They may want to identify fraudulent transactions, predict customer churn, or flag an operational risk without knowing which column should be the target, which features are useful, or how to evaluate a model.
+Many people have useful data and a question they want to answer, but no machine learning background. They may want to develop a classifier for fraud detection, disease diagnostics, or flag an operational risk without knowing which column should be the target, which features are useful, or how to evaluate a model.
 
 ML Assistant is a conversational web application built for that starting point. It helps users understand their CSV, translate their goal into a supervised learning problem, agree on an experiment, and interpret results from real model training. The aim is to automate the practical work while helping users understand the decisions being made.
 
