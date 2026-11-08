@@ -10,6 +10,9 @@ Many people have useful data and a question they want to answer, but no machine 
 
 ML Assistant is a conversational web application built for that starting point. It helps users understand their CSV, translate their goal into a supervised learning problem, agree on an experiment, and interpret results from real model training. The aim is to automate the practical work while helping users understand the decisions being made.
 
+## Video describing the usage of this application
+ Watch the video here for a demo: `https://www.loom.com/share/ca8a874f91d148259fe68b32a9bb36f1`
+
 ## Technology stack and Vultr deployment
 
 The application combines a lightweight JavaScript frontend with a Python backend and isolated ML execution:
